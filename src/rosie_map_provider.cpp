@@ -3,7 +3,6 @@
 #include <std_msgs/Float32.h>
 #include <std_msgs/UInt32.h>
 #include <std_msgs/Int8.h>
-#include <phidgets/motor_encoder.h>
 #include <geometry_msgs/Twist.h>
 #include <sensor_msgs/PointCloud.h>
 #include <nav_msgs/OccupancyGrid.h>
@@ -14,7 +13,6 @@
 #include <sstream>
 #include <math.h>
 #include <iostream>
-#include <pcl_ros/transforms.h>
 
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
@@ -23,35 +21,38 @@ float pi = 3.14159265359;
 float resolution;
 int width = 1;
 int height = 1;
+int numbMarkers = 0;
 
 float robotsize = 0.2;
 static std_msgs::Int8 *occGrid;
-visualization_msgs::Marker *markers;
+
+float* pointArray;
 
 static ros::Subscriber map_sub;
 static ros::Publisher grid_publisher;
-
+static ros::Publisher wall_publisher;
 
 ros::Time load_time;
 
 char mapInitialized = 0;
-void initializeMap(const visualization_msgs::MarkerArray msg){	
+void initializeMap(const visualization_msgs::MarkerArray msg){
 	ROS_INFO("Initializing!");
-	
+
 	map_sub = ros::Subscriber();
 
 	width = 480;
 	height = 480;
 	resolution = 0.01f;
-	int numbMarkers = msg.markers.size();
+	numbMarkers = msg.markers.size();
 	//markers = (visualization_msgs::Marker*)malloc(sizeof(visualization_msgs::Marker)*numbMarkers);
 	//markers = msg.markers;
-	
-	int czone = robotsize/((float)2*resolution) + 0.02/resolution; //additional extra security distance
 
-	float* pointArray = (float*)malloc(sizeof(float)*4*numbMarkers);
+	int czone = robotsize/((float)2*resolution) + 0.02/resolution; //additional extra security distance
+	
+	std::free(pointArray);
+	pointArray = (float*)malloc(sizeof(float)*4*numbMarkers);
 	for(int i = 0; i < 4*numbMarkers; ++i){
-		pointArray[i] = 0.0f;	
+		pointArray[i] = 0.0f;
 	}
 
 	float minX, minY, maxX, maxY;
@@ -129,11 +130,14 @@ void initializeMap(const visualization_msgs::MarkerArray msg){
 		for(float d = 0.0; d <= wallDist; d+=resolution){
 			int px = (int)((d*((x2-x1)/wallDist)+x1)/resolution);
 			int py = (int)((d*((y2-y1)/wallDist)+y1)/resolution);
+			occGrid[py*width+px] = 125;			
 
 			for(int y = -czone; y <= czone; y++){
 				for(int x = -czone; x <= czone; x++){
 					if((px+x) >= 0 && (px+x) < width && (py+y) >= 0 && (py+y) < height){
-						occGrid[(py+y)*width+px+x].data = 125;
+						if(occGrid[(py+y)*width+px+x].data != 125){
+							occGrid[(py+y)*width+px+x].data = 124;
+						}
 					}
 				}
 			}
@@ -147,8 +151,9 @@ int main(int argc, char **argv){
     ros::init(argc, argv, "rosie_map_provider");
 
     ros::NodeHandle n;
-    map_sub = n.subscribe<visualization_msgs::MarkerArray>("/maze_map", 1, initializeMap); 
-    grid_publisher = n.advertise<nav_msgs::OccupancyGrid>("/rosie_occupancy_grid",1);
+    map_sub = n.subscribe<visualization_msgs::MarkerArray>("/maze_map", 1, initializeMap);
+		grid_publisher = n.advertise<nav_msgs::OccupancyGrid>("/rosie_occupancy_grid",1);
+		//wall_publisher = n.advertise<std_msgs::Float32*>("/walls",1);
 
     ros::Rate loop_rate(5);
 
@@ -162,7 +167,8 @@ int main(int argc, char **argv){
 	    	loop_rate.sleep();
 			continue;
 		}
-	    nav_msgs::OccupancyGrid mapgrid;
+
+		nav_msgs::OccupancyGrid mapgrid;
 
 		mapgrid.header.seq = seq++;
 		mapgrid.header.stamp = ros::Time::now();
@@ -186,14 +192,23 @@ int main(int argc, char **argv){
 			mapgrid.data.push_back(occGrid[i].data);
 		}
 
-	    grid_publisher.publish(mapgrid);
+	  	grid_publisher.publish(mapgrid);
+
+		/*std_msgs::Float32* walls = (std_msgs::Float32*)malloc(sizeof(std_msgs::Float32)*(4*numbMarkers+2));
+		walls[0].data = width;
+		walls[1].data = height;
+		for(int i = 0; i<4*numbMarkers; ++i){
+			walls[i+2].data = pointArray[i];
+		}
+
+		wall_publisher.publish(walls);*/
 
 		tf::Transform transform;
 		transform.setOrigin( tf::Vector3(0, 0, 0) );
 		tf::Quaternion qtf;
 		qtf.setRPY(0, 0, 0);
 		transform.setRotation( qtf );
-		br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "map"));			
+		br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "map"));
 
 	    ros::spinOnce();
 

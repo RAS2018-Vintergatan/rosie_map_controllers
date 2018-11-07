@@ -59,7 +59,7 @@ void odomCallback(nav_msgs::Odometry msg){
 	pose=msg;
 }
 
-void gridCallback(nav_msgs::OccupancyGrid msg){
+/*void gridCallback(nav_msgs::OccupancyGrid msg){
 	width = msg.info.width;
 	height = msg.info.height;
 	occOrigin = msg.info.origin;
@@ -86,7 +86,7 @@ void gridCallback(nav_msgs::OccupancyGrid msg){
 	mapgrid.data.clear();
 
 	for(int i = 0; i < width*height; ++i){
-		mapgrid.data.push_back(occGrid.data[i]);
+		mapgrid.data.push_back(msg.data[i]);
 	}
 
 	occGrid = msg;
@@ -110,7 +110,8 @@ void gridCallback(nav_msgs::OccupancyGrid msg){
 
 
 
-}
+}*/
+int mapInitialized = 0;
 
 void lidarCallback(sensor_msgs::PointCloud msg){	
 	//ROS_INFO("");
@@ -119,14 +120,13 @@ void lidarCallback(sensor_msgs::PointCloud msg){
 	int size = sizeof(lidarPoints.points)*sizeof(lidarPoints.points[0]);
 
 	for(int i = 0; i<size; ++i){
-		float px = msg.points[i].x;
-		float py = msg.points[i].y;
-		if(abs(px) < win && abs(py) < win){
-			window[(int) (py*2*win + px)] = 125;
+		int px = msg.points[i].x/resolution;
+		int py = msg.points[i].y/resolution;
+		if(abs(px) < win_cells && abs(py) < win_cells){
+			window[(int) (py*2*win_cells + px)] = 125;
 		}	
 	}		
-      
-	//ROS_INFO("lidar window set !");
+    
 
 }
 
@@ -142,24 +142,57 @@ int main(int argc, char **argv){
     ros::NodeHandle n;
 
     ros::Subscriber odom_sub = n.subscribe<nav_msgs::Odometry>("/odom",100,odomCallback);
-    ros::Subscriber scan_sub = n.subscribe<sensor_msgs::PointCloud>("/my_cloud",100,lidarCallback);
-    ros::Subscriber grid_sub = n.subscribe<nav_msgs::OccupancyGrid>("/rosie_occupancy_grid",1, gridCallback);
-    grid_publisher = n.advertise<nav_msgs::OccupancyGrid>("/rosie_occupancy_grid",1);
+	//Subscribe to real time LIDAR point cloud (orientation independent)
+    ros::Subscriber realscan_sub = n.subscribe<sensor_msgs::PointCloud>("/scan",100,lidarCallback);
+	//Subscribe to transformed LIDAR occupancy grid (Fixed to robot frame)
+	ros::Subscriber scan_sub = n.subscribe<sensor_msgs::PointCloud>("/my_cloud",100,lidarCallback);
+    //ros::Subscriber grid_sub = n.subscribe<nav_msgs::OccupancyGrid>("/rosie_occupancy_grid",1, gridCallback);
+    grid_publisher = n.advertise<nav_msgs::OccupancyGrid>("/rosie_win_grid",1);
 
 	tf::TransformBroadcaster br;
 
     ros::Rate loop_rate(5);
 
 	load_time = ros::Time::now();
-	
+	int seq = 0;	
 	while(ros::ok()){
+		if(!mapInitialized){
+		    ros::spinOnce();
+	    	loop_rate.sleep();
+			continue;
+		}
+	    nav_msgs::OccupancyGrid windowgrid;
+
+		windowgrid.header.seq = seq++;
+		windowgrid.header.stamp = ros::Time::now();
+		windowgrid.header.frame_id = "win";
+
+		windowgrid.info.origin.position.x = 0;
+		windowgrid.info.origin.position.y = 0;
+		windowgrid.info.origin.position.z = 0;
+		windowgrid.info.origin.orientation.x = 0;
+		windowgrid.info.origin.orientation.y = 0;
+		windowgrid.info.origin.orientation.z = 0;
+		windowgrid.info.origin.orientation.w = 1;
+
+		windowgrid.info.map_load_time = load_time;
+		windowgrid.info.resolution = resolution;
+
+		windowgrid.info.width = 2*win;
+		windowgrid.info.height = 2*win;
+		windowgrid.data.clear();
+		for(int i = 0; i < width*height; ++i){
+			windowgrid.data.push_back(window[i]);
+		}
+
+		grid_publisher.publish(mapgrid);
 		//mapUpdate(br);
-	transform.setOrigin( tf::Vector3(0, 0, 0) );
+		transform.setOrigin( tf::Vector3(0, 0, 0) );
 	
-	qtf.setRPY(0, 0, 0);
-	transform.setRotation( qtf );
-	br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "map"));	
-	mapUpdated++;
+		qtf.setRPY(0, 0, 0);
+		transform.setRotation( qtf );
+		br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "win"));	
+		mapInitialized =1;
 		
 	    ros::spinOnce();
 
