@@ -1,0 +1,9 @@
+<launch>
+
+	<!-- load the map -->	
+	<node pkg="ras_maze_map" type="ras_maze_map_node" name="ras_maze_map_node" args="_map_file:=$(find ras_maze_map)/maps/empty_maze.txt"/>
+
+	<!-- run the dead reckoning node -->
+	<node pkg="rosie_map_controller" type="rosie_map_provider" name="rosie_map_provider"/>
+	
+</launch>

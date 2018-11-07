@@ -1,0 +1,9 @@
+<launch>
+
+	<!-- run the lidar node -->	
+	<include file="$(find rplidar_ros)/launch/rplidar.launch"/>	
+
+	<!-- run the dead reckoning node -->
+	<node pkg="rosie_map_controller" type="rosie_laser_publisher" name="rosie_laser_publisher"/>
+	
+</launch>
