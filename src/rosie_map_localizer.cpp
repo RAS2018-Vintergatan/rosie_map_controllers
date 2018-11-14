@@ -226,8 +226,42 @@ tf::Vector3 getCorrectionFromPoint(tf::Vector3 point, tf::Vector3 centerPoint, n
 	tf::Vector3 newPointFromCenterPoint(pointFromCenterPoint.x() + returnVector.x(),
 										 pointFromCenterPoint.y() + returnVector.y(),
 										 0);
-	returnVector.setZ(capAngle(atan2(pointFromCenterPoint.y(),pointFromCenterPoint.x()) -
-							   atan2(newPointFromCenterPoint.y(),newPointFromCenterPoint.x())));
+	returnVector.setZ(capAngle(atan2(newPointFromCenterPoint.y(),newPointFromCenterPoint.x()) - atan2(pointFromCenterPoint.y(),pointFromCenterPoint.x())));
+}
+
+geometry_msgs::Point32 getMedianPointByDistance(const geometry_msgs::Point32& p1, const geometry_msgs::Point32& p2, const geometry_msgs::Point32& p3){
+	
+	if(std::isnan(p1.x) || std::isnan(p1.y)
+		std::isnan(p3.x) || std::isnan(p3.y)){
+		return p2;
+	}else if(std::isnan(p2.x) || std::isnan(p2.y)){
+		return p1;
+	}
+	
+	double dist1 = sqrt(p1.x*p1.x + p1.y*p1.y);
+	double dist2 = sqrt(p2.x*p2.x + p2.y*p2.y);
+	double dist3 = sqrt(p3.x*p3.x + p3.y*p3.y);
+	
+	if(dist1 < dist2 && dist2 < dist3){
+		return p2;
+	}else if(dist3 < dist2 && dist2 < dist1){
+		return p2;
+	}else if(dist2 < dist3 && dist3 < dist1){
+		return p3;
+	}else if(dist1 < dist3 && dist3 < dist2){
+		return p3;
+	}else{
+		return p1;
+	}
+}
+
+geometry_msgs::Point32 getCyclicPointCloudElement(int index, int max){
+	while(index >= max){
+		index -= max;
+	}while(index < 0){
+		index += max;
+	}
+	return lastPointCloud_ptr->points[index];
 }
 
 void localize(){
@@ -240,8 +274,12 @@ void localize(){
 
 	int numContributions = 360;
 	for(int i = 0; i < 360; i+=1){
-		geometry_msgs::Point32 pointInCloud = lastPointCloud_ptr->points[i];
-
+		geometry_msgs::Point32 pointInCloud = getMedianPointByDistance(
+																		getCyclicPointCloudElement(i-1,360),
+																		getCyclicPointCloudElement(i,360),
+																		getCyclicPointCloudElement(i+1,360)
+																	);
+		
 		if(std::isnan(pointInCloud.x) || std::isnan(pointInCloud.y) || std::isnan(pointInCloud.z)){
 			continue;
 		}
@@ -259,15 +297,27 @@ void localize(){
 		if(isnan(diffVector.z())){
 			continue;
 		}	
-
-		//++numContributions;
+		
 		transformXSum += diffVector.x();
 		transformYSum += diffVector.y();
 		transformYawSum += diffVector.z();
+		
+		if(diffVector.x() > -1.0f && diffVector.x() < 1.0f && diffVector.y() > -1.0f && diffVector.y() < 1.0f){
+			++numContributions;
+			transformXSum += diffVector.x();
+			transformYSum += diffVector.y();
+			transformYawSum += diffVector.z();
+		}
+		if(sqrt(point.x()*point.x() + point.y()*point.y()) < 1.0){
+			++numContributions;
+			transformXSum += diffVector.x();
+			transformYSum += diffVector.y();
+			transformYawSum += diffVector.z();
+		}
 		//ROS_INFO("Diffvector! X:%f, Y:%f, Yaw:%f",diffVector.x(),diffVector.y(),diffVector.z());
 	}
 	//ROS_INFO("Correction Sum! X:%f, Y:%f, Yaw:%f",transformXSum,transformYSum,transformYawSum);
-	publishCorrection(transformXSum/numContributions,transformYSum/numContributions,-transformYawSum/numContributions);
+	publishCorrection(transformXSum/numContributions,transformYSum/numContributions,transformYawSum/numContributions);
 }
 
 int main(int argc, char **argv){
