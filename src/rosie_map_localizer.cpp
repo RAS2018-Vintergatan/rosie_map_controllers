@@ -231,7 +231,7 @@ tf::Vector3 getCorrectionFromPoint(tf::Vector3 point, tf::Vector3 centerPoint, n
 
 geometry_msgs::Point32 getMedianPointByDistance(const geometry_msgs::Point32& p1, const geometry_msgs::Point32& p2, const geometry_msgs::Point32& p3){
 	
-	if(std::isnan(p1.x) || std::isnan(p1.y)
+	if(std::isnan(p1.x) || std::isnan(p1.y) ||
 		std::isnan(p3.x) || std::isnan(p3.y)){
 		return p2;
 	}else if(std::isnan(p2.x) || std::isnan(p2.y)){
