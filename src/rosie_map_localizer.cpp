@@ -11,10 +11,15 @@
 #include <sstream>
 #include <math.h>
 #include <tf/transform_broadcaster.h>
+#include <tf/transform_listener.h>
 #include <iostream>
 
-sensor_msgs::PointCloud cloud;
-geometry_msgs::Point32* staticCloud;
+#define PI 3.141592f
+#define TWO_PI 6.28319f
+
+boost::shared_ptr<sensor_msgs::PointCloud> lastPointCloud_ptr;
+boost::shared_ptr<tf::TransformListener> laser_tfl_ptr;
+boost::shared_ptr<tf::StampedTransform> laser_point_tf_ptr;
 
 ros::Time load_time;
 
@@ -23,7 +28,6 @@ nav_msgs::OccupancyGrid occGrid;
 nav_msgs::Odometry odom;
 
 ros::Publisher pose_pub;
-
 
 char odomGotten = 0;
 char occGridGotten = 0;
@@ -49,7 +53,13 @@ void gridCallback(nav_msgs::OccupancyGrid msg){
 }
 
 void lidarCallback(sensor_msgs::PointCloud msg){	
-	cloud = msg;
+	*lastPointCloud_ptr = msg;
+	try{
+		(*laser_tfl_ptr).waitForTransform("world", msg.header.frame_id, ros::Time(0), ros::Duration(10.0));
+		(*laser_tfl_ptr).lookupTransform("world", msg.header.frame_id, ros::Time(0), *laser_point_tf_ptr);
+	}catch(tf::TransformException ex){
+		ROS_ERROR("%s",ex.what());
+	}
 	lidarGotten = 1;
 }
 
@@ -65,289 +75,208 @@ int getGridY(float worldY, float resolution){
 	return gridY;
 }
 
+/*
+ * Returns the angle between -PI and +PI
+ */
+float capAngle(const float& angleIn){
+	float angleOut = angleIn;
+	while(angleOut < 0)
+			angleOut += TWO_PI;
+	while(angleOut > TWO_PI)
+		angleOut -= TWO_PI;
+	if(angleOut > PI){
+		angleOut = (angleOut-TWO_PI);
+	}
+	return angleOut;
+}
+
 int getOccGridValue(int x, int y){
 	int gridWidth = occGrid.info.width;
 	int gridHeight = occGrid.info.height;
 	return occGrid.data[y*gridWidth+x];
 }
 
-int getConfigScore(int conf_grid_x, int conf_grid_y, float conf_angle, int* grid, geometry_msgs::Point32* cloud, nav_msgs::Odometry odom,
-					 float gridResolution, int scaledGridWidth, int scaledGridHeight){
-	int robotDiffX = (conf_grid_x/gridResolution)-odom.pose.pose.position.x;
-	int robotDiffY = (conf_grid_y/gridResolution)-odom.pose.pose.position.y;
-
-	/*float closestDist = -1;
-	int closestAngle = 0;*/
-
-	//int staticScore = -sqrt(std::pow(robotDiffX,2)+std::pow(robotDiffY,2)) - std::abs(point_to_robot_angle_diff)*100;
-	int currentScore = 0;
-	for(int i = 0; i < 360; ++i){
-		geometry_msgs::Point32 point = cloud[i];				
-
-		geometry_msgs::Point32 transformedPoint;
-		transformedPoint.x = conf_grid_x*gridResolution + point.x*cos(conf_angle) + point.y*sin(conf_angle);
-		transformedPoint.y = conf_grid_y*gridResolution - point.x*sin(conf_angle) + point.y*cos(conf_angle);
-
-		//float dist = sqrt((transformedPoint.x*transformedPoint.x)+(transformedPoint.y*transformedPoint.y));
-		//if(dist > 1.5){
-		//	continue;
-		//}
-
-		int gridX = getGridX(transformedPoint.x, gridResolution);
-		int gridY = getGridY(transformedPoint.y, gridResolution);
-
-		/*if(closestDist < 0 || dist < closestDist){
-			closestDist = dist;
-			closestAngle = i;
-		}*/
-
-		if(gridX >= scaledGridWidth || gridX < 0){
-			if(gridX <= scaledGridWidth + 0.5/gridResolution && gridX > 0 - 0.5/gridResolution){
-				currentScore+=12;
-			}
-			continue;
-		}
-		if(gridY >= scaledGridHeight || gridY < 0){
-			if(gridY <= scaledGridHeight + 0.5/gridResolution && gridY > 0 - 0.5/gridResolution){
-				currentScore+=12;
-			}
-			continue;
-		}
-
-		int gridValue = grid[gridY*scaledGridWidth+gridX];
-		if(gridValue > 0){
-			if(gridValue == 125){
-				currentScore+= 1000;
-			}
-			currentScore += gridValue;
-		}else{
-			ROS_INFO("No wall on: x:%d|y:%d", gridX, gridY);
-			//currentScore -= 1;
-		}
-	}
-	/*if(angle == 0){
-		geometry_msgs::Point32 transformedPoint;
-		transformedPoint.x = cloud[closestAngle].x*cos(angle) + cloud[closestAngle].y*sin(angle);
-		transformedPoint.y = -cloud[closestAngle].x*sin(angle) + cloud[closestAngle].y*cos(angle);
-		ROS_INFO("Closest angle: %d @ %f, \tx:%f|y:%f", closestAngle, closestDist,transformedPoint.x,transformedPoint.y);
-	}*/
-	return (currentScore);// + staticScore*100;
-}
-
-int getConfigScore(int conf_grid_x, int conf_grid_y, float conf_angle, geometry_msgs::Point32* cloud, nav_msgs::Odometry odom,
-					 float gridResolution, int gridWidth, int gridHeight){
-	int robotDiffX = (conf_grid_x/gridResolution)-odom.pose.pose.position.x;
-	int robotDiffY = (conf_grid_y/gridResolution)-odom.pose.pose.position.y;
-
-	/*float closestDist = -1;
-	int closestAngle = 0;*/
-
-	//int staticScore = -sqrt(std::pow(robotDiffX,2)+std::pow(robotDiffY,2)) - std::abs(conf_angle)*100;
-	int currentScore = 0;
-	for(int i = 0; i < 360; ++i){
-		geometry_msgs::Point32 point = cloud[i];
-
-		geometry_msgs::Point32 transformedPoint;
-		transformedPoint.x = conf_grid_x*gridResolution + point.x*cos(conf_angle) + point.y*sin(conf_angle);
-		transformedPoint.y = conf_grid_y*gridResolution - point.x*sin(conf_angle) + point.y*cos(conf_angle);
-
-		//float dist = sqrt((transformedPoint.x*transformedPoint.x)+(transformedPoint.y*transformedPoint.y));
-		//if(dist > 1.5){
-		//	continue;
-		//}
-
-		int gridX = conf_grid_x+getGridX(transformedPoint.x, gridResolution);
-		int gridY = conf_grid_y+getGridY(transformedPoint.y, gridResolution);
-
-		if(gridX >= gridWidth || gridX < 0){
-			if(gridX <= gridWidth + 0.5/gridResolution && gridX > 0 - 0.5/gridResolution){
-				currentScore+=12;
-			}
-			continue;
-		}
-		if(gridY >= gridHeight || gridY < 0){
-			if(gridY <= gridHeight + 0.5/gridResolution && gridY > 0 - 0.5/gridResolution){
-				currentScore+=12;
-			}
-			continue;
-		}
-
-		int gridValue = getOccGridValue(gridX,gridY);
-		if(gridValue > 0){
-			if(gridValue == 125){
-				currentScore+= 1000;
-			}
-			currentScore += gridValue;
-		}else{
-			
-			//currentScore -= 1;
-		}
-	}
-	return (currentScore);// + staticScore*100;
-}
-
-void publishCorrection(float newX, float newY, float newAngle){
+void publishCorrection(float correctionX, float correctionY, float correctionAngle){
 	
-	geometry_msgs::PoseStamped newPose;
+	ROS_INFO("Correction! X:%f, Y:%f, Yaw:%f",correctionX,correctionY,correctionAngle);
 
-    newPose.header.stamp = ros::Time::now();;
-    newPose.header.frame_id = "world";
+	geometry_msgs::PoseStamped correctionPose;
 
-	newPose.pose.orientation.x = 0;
-    newPose.pose.orientation.y = 0;
-    newPose.pose.orientation.z = sin(newAngle/2);
-    newPose.pose.orientation.w = cos(newAngle/2);
+    correctionPose.header.stamp = ros::Time::now();;
+    correctionPose.header.frame_id = "world";
 
-    newPose.pose.position.x = newX;
-    newPose.pose.position.y = newY;
-	newPose.pose.position.z = 0;
+	correctionPose.pose.orientation.x = 0;
+    correctionPose.pose.orientation.y = 0;
+    correctionPose.pose.orientation.z = sin(correctionAngle/2);
+    correctionPose.pose.orientation.w = cos(correctionAngle/2);
 
-	pose_pub.publish(newPose);
+    correctionPose.pose.position.x = correctionX;
+    correctionPose.pose.position.y = correctionY;
+	correctionPose.pose.position.z = 0;
+
+	pose_pub.publish(correctionPose);
+}
+
+char isPointInside(const int& x, const int& y, const int& gridWidth, const int& gridHeight){
+	if(x >= 0 && x < gridWidth && y >= 0 && y < gridHeight) 
+		return 1;
+	return 0;
+}
+
+tf::Vector3 getCorrectionFromPoint(tf::Vector3 point, tf::Vector3 centerPoint, nav_msgs::OccupancyGrid wallGrid){
+	int gridWidth = wallGrid.info.width;
+	int gridHeight = wallGrid.info.height;
+	float gridResolution = wallGrid.info.resolution;
+
+	tf::Vector3 pointFromCenterPoint(point.x()-centerPoint.x(),point.y()-centerPoint.y(),0);
+
+	int centerGridX = getGridX(centerPoint.x(), gridResolution);
+	int centerGridY = getGridY(centerPoint.y(), gridResolution);
+
+	int pointGridX = getGridX(point.x(), gridResolution);
+	int pointGridY = getGridY(point.y(), gridResolution);
+
+	//Check if point is inside the grid, walls are the distance otherwise return the closest wall point
+	if(!isPointInside(pointGridX, pointGridY, gridWidth, gridHeight)){
+		tf::Vector3 returnVector(0,0,0);
+		if(pointGridX < 0){
+			returnVector.setX(-pointGridX*gridResolution);
+		}else if(pointGridX >= gridWidth){
+			returnVector.setX((gridWidth - pointGridX)*gridResolution);
+		}
+		if(pointGridY < 0){
+			returnVector.setY(-pointGridY*gridResolution);
+		}else if(pointGridY >= gridHeight){
+			returnVector.setY((gridHeight - pointGridY)*gridResolution);
+		}
+		tf::Vector3 newPointFromCenterPoint(pointFromCenterPoint.x() + returnVector.x(),
+											 pointFromCenterPoint.y() + returnVector.y(),
+											 0);
+		returnVector.setZ(capAngle(atan2(pointFromCenterPoint.y(),pointFromCenterPoint.x()) -
+							   atan2(newPointFromCenterPoint.y(),newPointFromCenterPoint.x())));
+		return returnVector;
+	}
+
+	//Define search window size
+	int smallestSearchDistance = -1;
+	int searchSize = 0;
+	while(smallestSearchDistance == -1 && searchSize < ((gridHeight+gridWidth)>>1)){
+		++searchSize;
+		int x1 = pointGridX + searchSize;
+		int y1 = pointGridY;
+
+		int x2 = pointGridX - searchSize;
+		int y2 = pointGridY;
+
+		int x3 = pointGridX;
+		int y3 = pointGridY + searchSize;
+
+		int x4 = pointGridX;
+		int y4 = pointGridY - searchSize;
+		
+		if(!isPointInside(x1, y1, gridWidth, gridHeight) ||
+			!isPointInside(x2, y2, gridWidth, gridHeight) ||
+			!isPointInside(x3, y3, gridWidth, gridHeight) ||
+			!isPointInside(x4, y4, gridWidth, gridHeight)){
+			// A point outside, smallest search window found
+			smallestSearchDistance = searchSize;
+		}else{
+			if(wallGrid.data[y1*gridWidth + x1] == 125 ||
+				wallGrid.data[y2*gridWidth + x2] == 125 ||
+				wallGrid.data[y3*gridWidth + x3] == 125 ||
+				wallGrid.data[y4*gridWidth + x4] == 125){
+				// A point found a wall, smallest search window found
+				smallestSearchDistance = searchSize;
+			}
+		}
+	}
+	
+	//Search for absolute smallest distance
+	float smallestDistance = -1;
+	int smallestX;
+	int smallestY;
+	for(int j = -(smallestSearchDistance); j < (smallestSearchDistance); ++j){
+		for(int i = -(smallestSearchDistance); i < (smallestSearchDistance); ++i){
+			if(i < -(smallestSearchDistance) || j < (smallestSearchDistance)){
+				continue;
+			}
+			int sy = pointGridY+j;
+			int sx = pointGridX+i;
+			if(isPointInside(sx, sy, gridWidth, gridHeight) &&
+				wallGrid.data[sy*gridWidth+sx] == 125){
+				float distance = sqrt(pow(i,2)+pow(j,2));
+				if(smallestDistance < 0 || distance < smallestDistance){
+					smallestDistance = distance;
+					smallestX = sx;
+					smallestY = sy;
+					int absi = i < 0 ? -i:i;
+					int absj = j < 0 ? -j:j;
+					if(absi < absj){
+						smallestSearchDistance = absi;
+					}else{
+						smallestSearchDistance = absj;
+					}
+				}
+			}
+		}
+	}
+
+	//Now we have the point with the smallest distance
+	tf::Vector3 returnVector((pointGridX+smallestX)*gridResolution, (pointGridY+smallestY)*gridResolution, 0);
+	tf::Vector3 newPointFromCenterPoint(pointFromCenterPoint.x() + returnVector.x(),
+										 pointFromCenterPoint.y() + returnVector.y(),
+										 0);
+	returnVector.setZ(capAngle(atan2(pointFromCenterPoint.y(),pointFromCenterPoint.x()) -
+							   atan2(newPointFromCenterPoint.y(),newPointFromCenterPoint.x())));
 }
 
 void localize(){
 
-	/* Initialize variables */
-	std::free(staticCloud);
-	staticCloud = (geometry_msgs::Point32*)malloc(sizeof(geometry_msgs::Point32)*360);
-	for(int i = 0; i < 360; ++i){
-		staticCloud[i] = cloud.points[i];
-	}	
-	nav_msgs::Odometry staticOdom = odom;
+	double transformXSum;
+	double transformYSum;
+	double transformYawSum;
 
-	float gridResolution = occGrid.info.resolution;
-	int gridWidth = occGrid.info.width;
-	int gridHeight = occGrid.info.height;
+	tf::Vector3 odomPoint(odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z);
 
-	int lastKnownX = getGridX(odom.pose.pose.position.x, gridResolution);
-	int lastKnownY = getGridY(odom.pose.pose.position.y, gridResolution);
-	double lastKnownAngle = odom.pose.pose.orientation.z;
+	int numContributions = 360;
+	for(int i = 0; i < 360; i+=1){
+		geometry_msgs::Point32 pointInCloud = lastPointCloud_ptr->points[i];
 
-	tf::Quaternion q(odom.pose.pose.orientation.x, odom.pose.pose.orientation.y,
-					 odom.pose.pose.orientation.z, odom.pose.pose.orientation.w);
-    tf::Matrix3x3 m(q);
-    double roll, pitch;
-    m.getRPY(roll, pitch, lastKnownAngle);
-
-	/* Generate scaled version of the map */
-
-	int searchSize = 25;
-	int searchScale = 5;
-	int searchCells = searchSize/searchScale;
-	int searchCellsHalf = searchCells>>1;
-	int searchAngles = 36;
-
-	int scaledGridWidth = gridWidth/searchScale;
-	int scaledGridHeight = gridHeight/searchScale;
-
-	int* scaledGrid = (int*)malloc(sizeof(int)*scaledGridWidth*scaledGridHeight);
-
-	for(int j = 0; j < scaledGridHeight; ++j){
-		for(int i = 0; i < scaledGridWidth; ++i){
-			int gridVal = 0;
-			for(int u = 0; (j*searchScale)+u < gridHeight; ++u){
-				for(int v = 0; (i*searchScale)+v < gridWidth; ++v){
-					int cellValue = getOccGridValue((i*searchScale)+v,(j*searchScale)+u);
-					if(cellValue > gridVal){
-						gridVal = cellValue;
-					}if(cellValue != 0 && cellValue != 120){
-						ROS_INFO("CellValue on |x:%d|y:%d|:%d",(i*searchScale)+v,(j*searchScale)+u,cellValue);
-					}
-				}
-			}
-			scaledGrid[j*scaledGridWidth + i] = gridVal;
-		}
-	}
-
-	/* Search in a scaled version of the map */
-
-	float bestAngle = 0.0f;
-	int bestX = -1;
-	int bestY = -1;
-	int bestValue = -1;
-
-	float searchAngleDiff = 3.141593*2/searchAngles;
-	for(int j = -searchCellsHalf; j < searchCellsHalf; ++j){
-		int y = (lastKnownY/searchScale) + j;
-		if(y < 0 || y > scaledGridHeight){
+		if(std::isnan(pointInCloud.x) || std::isnan(pointInCloud.y) || std::isnan(pointInCloud.z)){
 			continue;
 		}
-		for(int i = -searchCellsHalf; i < searchCellsHalf; ++i){
-			int x = (lastKnownX/searchScale) + i;
-			if(x < 0 || x > scaledGridWidth){
-				continue;
-			}
-			for(float o = 0; o < 3.141593*2; o+=searchAngleDiff){
-				int score = getConfigScore(x, y, o, scaledGrid, staticCloud, staticOdom, gridResolution*searchScale, scaledGridWidth, scaledGridHeight);
-				if(score > bestValue || bestX == -1 || bestY == -1){
-					bestValue = score;
-					bestX = x;
-					bestY = y;
-					bestAngle = o+bestAngle;
-				}
-			}
-		}
-	}
 
-	if(0&&bestValue < 0){
-		ROS_ERROR("Could not find the position accurately enough!");
-		std::free(scaledGrid);
-		return;
-	}
-
-	/* Search more accurately around the found scaled config */	
-
-	//bestAngle = 0;//3.1415;
-	//bestX = 40;
-	//bestY = 40;
-
-	float bestAngleAccurate = 0.0f;
-	int bestXAccurate = -1;
-	int bestYAccurate = -1;
-	int bestValueAccurate = -1;
-
-	for(int j = -searchCells; j < searchCells; ++j){
-		int y = bestY*searchScale + j;
-		if(y < 0 || y > gridHeight){
+		tf::Vector3 point(pointInCloud.x,pointInCloud.y,pointInCloud.z);
+		
+		if(std::isnan(point.x()) || std::isnan(point.y()) || std::isnan(point.z())){
 			continue;
 		}
-		for(int i = -searchCells; i < searchCells; ++i){
-			for(float o = -searchAngleDiff; o < searchAngleDiff; o+=0.02){			
-				int x = bestX*searchScale + i;
-				if(x < 0 || x > gridWidth){
-					continue;
-				}
-				int score = getConfigScore(x, y, bestAngle+o, staticCloud, staticOdom, gridResolution, gridWidth, gridHeight);
-				if(score > bestValueAccurate || bestXAccurate == -1 || bestYAccurate == -1){
-					bestValueAccurate = score;
-					bestXAccurate = x;
-					bestYAccurate = y;
-					bestAngleAccurate = bestAngle+o;
-				}
-			}
-		}
+
+		tf::Vector3 point_tf = (*laser_point_tf_ptr) * point;
+
+		tf::Vector3 diffVector = getCorrectionFromPoint(point_tf, odomPoint, occGrid);
+
+		if(isnan(diffVector.z())){
+			continue;
+		}	
+
+		//++numContributions;
+		transformXSum += diffVector.x();
+		transformYSum += diffVector.y();
+		transformYawSum += diffVector.z();
+		//ROS_INFO("Diffvector! X:%f, Y:%f, Yaw:%f",diffVector.x(),diffVector.y(),diffVector.z());
 	}
-	if(0&&bestValueAccurate < 0){
-		ROS_ERROR("Could not find the position accurately enough!");
-		std::free(scaledGrid);
-		return;
-	}
-	std::free(scaledGrid);
-
-	ROS_INFO("---- World GRID ---- width: %d, height: %d, resolution: %f",gridWidth,gridHeight,gridResolution);
-	ROS_INFO("---- Scaled GRID ---- width: %d, height: %d",scaledGridWidth,scaledGridHeight);
-	ROS_INFO("---- LAST ---- xWorld: %f, xGrid: %d, yWorld: %f, yGrid: %d", odom.pose.pose.position.x, lastKnownX, odom.pose.pose.position.y, lastKnownY);
-	ROS_INFO("---- Scaled ---- best value: %d, X: %d, Y: %d, Angle: %f", bestValue, bestX, bestY, bestAngle);
-	ROS_INFO("---- Accurate ---- BestValue: %d, X: %d, Y: %d, Angle: %f", bestValueAccurate, bestXAccurate, bestYAccurate, bestAngleAccurate);
-
-	ROS_INFO("---- Publishing");
-
-	publishCorrection(bestXAccurate*gridResolution,bestYAccurate*gridResolution,bestAngleAccurate);
+	//ROS_INFO("Correction Sum! X:%f, Y:%f, Yaw:%f",transformXSum,transformYSum,transformYawSum);
+	publishCorrection(transformXSum/numContributions,transformYSum/numContributions,-transformYawSum/numContributions);
 }
 
 int main(int argc, char **argv){
     ros::init(argc, argv, "rosie_map_localizer");
 
+	
+	laser_tfl_ptr.reset(new tf::TransformListener);
+	laser_point_tf_ptr.reset(new tf::StampedTransform);
+	lastPointCloud_ptr.reset(new sensor_msgs::PointCloud);
 
     ros::NodeHandle n;
 	//Subscribe to Rosie's reported pose
@@ -359,7 +288,7 @@ int main(int argc, char **argv){
     ros::Subscriber grid_sub = n.subscribe<nav_msgs::OccupancyGrid>("/rosie_occupancy_grid",1, gridCallback);
 
 	load_time = ros::Time::now();
-	ros::Rate loop_rate(1);
+	ros::Rate loop_rate(20);
 
 	while(ros::ok()){
 		if(odomGotten && occGridGotten && lidarGotten){
