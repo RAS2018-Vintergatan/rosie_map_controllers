@@ -216,8 +216,8 @@ tf::Vector3 getCorrectionFromPoint(tf::Vector3 point, tf::Vector3 centerPoint, n
 					float distance = sqrt(pow(i,2)+pow(j,2));
 					if(smallestDistance < 0 || distance < smallestDistance){
 						smallestDistance = distance;
-						smallestX = sx;
 						smallestY = sy;
+						smallestX = sx;
 						int absi = i < 0 ? -i:i;
 						int absj = j < 0 ? -j:j;
 						if(absi < absj){
@@ -287,71 +287,102 @@ void localize(){
 	line_list.header.stamp = ros::Time::now();
 	line_list.header.frame_id = "world";
 
-	double transformXSum = 0;
-	double transformYSum = 0;
-	double transformYawSum = 0;
-
 	tf::Vector3 odomPoint(odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z);
-
-	int numContributions = 0;
-	for(int i = 0; i < 360; i+=1){
-		geometry_msgs::Point32 pointInCloud = getMedianPointByDistance(
-																		getCyclicPointCloudElement(i-1,360),
-																		getCyclicPointCloudElement(i,360),
-																		getCyclicPointCloudElement(i+1,360)
-																	);
+	
+	float bestScore = -1.0;
+	float bestXTransform = 0.0f;
+	float bestYTransform = 0.0f;
+	float bestRotation = 0.0f;
+	for(float initialRotation = -1.14; initialRotation < 1.14; initialRotation += 0.1f){
 		
-		if(std::isnan(pointInCloud.x) || std::isnan(pointInCloud.y) || std::isnan(pointInCloud.z)){
-			continue;
-		}
-
-		tf::Vector3 point(pointInCloud.x,pointInCloud.y,pointInCloud.z);
-		
-		if(std::isnan(point.x()) || std::isnan(point.y()) || std::isnan(point.z())){
-			continue;
-		}
-
-		tf::Vector3 point_tf = (*laser_point_tf_ptr) * point;
-
-		tf::Vector3 diffVector = getCorrectionFromPoint(point_tf, odomPoint, occGrid);
-
-		if(isnan(diffVector.z())){
-			continue;
-		}	
-		
-		if((diffVector.x() < -1.0f || diffVector.x() > 1.0f) && (diffVector.y() < -1.0f || diffVector.y() > 1.0f)){
-			continue;
-		}
+		double transformXSum = 0;
+		double transformYSum = 0;
+		double transformYawSum = 0;
+	
+		float errorSum = 0.0f;
+		int numContributions = 0;
+		for(int i = 0; i < 360; i+=1){
+			geometry_msgs::Point32 pointInCloud = getMedianPointByDistance(
+																			getCyclicPointCloudElement(i-1,360),
+																			getCyclicPointCloudElement(i,360),
+																			getCyclicPointCloudElement(i+1,360)
+																		);
 			
-		++numContributions;
-		transformXSum += diffVector.x();
-		transformYSum += diffVector.y();
-		transformYawSum += diffVector.z();
-		
-		if(diffVector.x() > -0.2f && diffVector.x() < 0.2f && diffVector.y() > -0.2f && diffVector.y() < 0.2f){
-			numContributions += 3;
-			transformXSum += diffVector.x()*3;
-			transformYSum += diffVector.y()*3;
-			transformYawSum += diffVector.z()*3;
-		}
-		if(sqrt(point.x()*point.x() + point.y()*point.y()) < 0.5){
+			if(std::isnan(pointInCloud.x) || std::isnan(pointInCloud.y) || std::isnan(pointInCloud.z)){
+				continue;
+			}
+
+			tf::Vector3 point(pointInCloud.x*cos(initialRotation)-pointInCloud.y*sin(initialRotation),
+									 pointInCloud.x*sin(initialRotation)+pointInCloud.y*cos(initialRotation),
+									 pointInCloud.z);
+									 
+			/*tf::Vector3 point(pointInCloud.x,
+									 pointInCloud.y,
+									 pointInCloud.z);*/
+			
+			if(std::isnan(point.x()) || std::isnan(point.y()) || std::isnan(point.z())){
+				continue;
+			}
+
+			tf::Vector3 point_tf = (*laser_point_tf_ptr) * point;
+
+			tf::Vector3 diffVector = getCorrectionFromPoint(point_tf, odomPoint, occGrid);
+
+			if(isnan(diffVector.z())){
+				continue;
+			}	
+			
+			if((diffVector.x() < -1.0f || diffVector.x() > 1.0f) && (diffVector.y() < -1.0f || diffVector.y() > 1.0f)){
+				continue;
+			}
+				
+			errorSum += sqrt(pow(diffVector.x(),2) + pow(diffVector.y(),2));
+				
 			++numContributions;
 			transformXSum += diffVector.x();
 			transformYSum += diffVector.y();
 			transformYawSum += diffVector.z();
-		}
+			
+			if(diffVector.x() > -0.2f && diffVector.x() < 0.2f && diffVector.y() > -0.2f && diffVector.y() < 0.2f){
+				numContributions += 3;
+				transformXSum += diffVector.x()*3;
+				transformYSum += diffVector.y()*3;
+				transformYawSum += diffVector.z()*3;
+			}
+			if(sqrt(pow(point.x(),2) + pow(point.y(),2)) < 0.5){
+				++numContributions;
+				transformXSum += diffVector.x();
+				transformYSum += diffVector.y();
+				transformYawSum += diffVector.z();
+			}
+			
+			if(initialRotation > -0.05 && initialRotation < 0.05){
+				geometry_msgs::Point p;
+				p.x = point_tf.x();
+				p.y = point_tf.y();
+				line_list.points.push_back(p);
+				p.x += diffVector.x();
+				p.y += diffVector.y();
+				line_list.points.push_back(p);
+			}
+			//ROS_INFO("Diffvector! X:%f, Y:%f, Yaw:%f",diffVector.x(),diffVector.y(),diffVector.z());
+		}	
 		
-		geometry_msgs::Point p;
-		p.x = point_tf.x();
-		p.y = point_tf.y();
-		line_list.points.push_back(p);
-		p.x += diffVector.x();
-		p.y += diffVector.y();
-		line_list.points.push_back(p);
-		//ROS_INFO("Diffvector! X:%f, Y:%f, Yaw:%f",diffVector.x(),diffVector.y(),diffVector.z());
+		float transformX = transformXSum/numContributions;
+		float transformY = transformYSum/numContributions;
+		float transformYaw = transformYawSum/numContributions;
+		errorSum /= numContributions;
+		float score = sqrt(pow(transformX,2) + pow(transformY,2));
+		if(bestScore < 0 || errorSum < bestScore){
+			bestRotation = capAngle(initialRotation+transformYaw)/5;
+			bestXTransform = transformX;
+			bestYTransform = transformY;
+			bestScore = errorSum;
+		}
 	}
 	//ROS_INFO("Correction Sum! X:%f, Y:%f, Yaw:%f",transformXSum,transformYSum,transformYawSum);
-	publishCorrection(transformXSum/numContributions,transformYSum/numContributions,transformYawSum/numContributions);
+	ROS_INFO("BestScore: %f, bestRotation: %f, bestX: %f, bestY: %f", bestScore, bestRotation, bestXTransform, bestYTransform);
+	publishCorrection(bestXTransform,bestYTransform,bestRotation);
 	
 	localisationVisualisationPublisher.publish(line_list);
 }
@@ -375,7 +406,7 @@ int main(int argc, char **argv){
     ros::Subscriber grid_sub = n.subscribe<nav_msgs::OccupancyGrid>("/rosie_occupancy_grid",1, gridCallback);
 
 	load_time = ros::Time::now();
-	ros::Rate loop_rate(50);
+	ros::Rate loop_rate(100);
 
 	while(ros::ok()){
 		if(odomGotten && occGridGotten && lidarGotten){
