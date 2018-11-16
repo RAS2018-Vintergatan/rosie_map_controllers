@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(rosie_map_controller)
 
-find_package(catkin REQUIRED COMPONENTS roscpp rospy std_msgs phidgets geometry_msgs visualization_msgs sensor_msgs tf message_filters laser_geometry pcl_ros)
+find_package(catkin REQUIRED COMPONENTS roscpp rospy std_msgs phidgets geometry_msgs  visualization_msgs sensor_msgs tf message_filters laser_geometry pcl_ros)
 
 catkin_package(
   DEPENDS
