@@ -24,7 +24,7 @@ int height = 1;
 int numbMarkers = 0;
 
 float robotsize = 0.2;
-static std_msgs::Int8 *occGrid;
+static std_msgs::Int8* occGrid;
 
 float* pointArray;
 
@@ -48,7 +48,7 @@ void initializeMap(const visualization_msgs::MarkerArray msg){
 	//markers = msg.markers;
 
 	int czone = robotsize/((float)2*resolution) + 0.02/resolution; //additional extra security distance
-	
+
 	std::free(pointArray);
 	pointArray = (float*)malloc(sizeof(float)*4*numbMarkers);
 	for(int i = 0; i < 4*numbMarkers; ++i){
@@ -130,7 +130,7 @@ void initializeMap(const visualization_msgs::MarkerArray msg){
 		for(float d = 0.0; d <= wallDist; d+=resolution){
 			int px = (int)((d*((x2-x1)/wallDist)+x1)/resolution);
 			int py = (int)((d*((y2-y1)/wallDist)+y1)/resolution);
-			occGrid[py*width+px] = 125;			
+			occGrid[py*width+px].data = 125;
 
 			for(int y = -czone; y <= czone; y++){
 				for(int x = -czone; x <= czone; x++){
