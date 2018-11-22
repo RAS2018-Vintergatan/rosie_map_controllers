@@ -23,6 +23,7 @@ add_service_files(
   FILES
   CommissionRerun.srv
   RequestRerun.srv
+  StartRRT.srv
 )
 
 generate_messages(
