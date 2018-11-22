@@ -1,0 +1,4 @@
+<launch>
+	<!-- run the dead reckoning node -->
+	<node pkg="rosie_map_controller" type="rosie_map_localizer" name="rosie_map_localizer"/>
+</launch>
