@@ -12,7 +12,9 @@
   <author email="niewalda@kth.se">Tobias Niewalda</author>
   <author email="fhyy@kth.se">Fredrik Hyyrynen</author>
 
+  <buildtool_depend>catkin</buildtool_depend>
 
+  <build_depend>message_generation</build_depend>
   <build_depend>roscpp</build_depend>
   <build_depend>rospy</build_depend>
   <build_depend>std_msgs</build_depend>
@@ -24,9 +26,13 @@
   <build_depend>laser_geometry</build_depend>
   <build_depend>pcl_ros</build_depend>
   <build_depend>visualization_msgs</build_depend>
-  <build_depend>message_generation</build_depend>
   <build_depend>roslib</build_depend>
+  <build_depend>nav_msgs</build_depend>
 
+  <run_depend>nav_msgs</run_depend>
+
+
+  <run_depend>message_runtime</run_depend>
   <run_depend>roscpp</run_depend>
   <run_depend>rospy</run_depend>
   <run_depend>std_msgs</run_depend>
@@ -38,9 +44,7 @@
   <run_depend>laser_geometry</run_depend>
   <run_depend>pcl_ros</run_depend>
   <run_depend>visualization_msgs</run_depend>
-  <run_depend>message_runtime</run_depend>
   <run_depend>roslib</run_depend>
 
-  <buildtool_depend>catkin</buildtool_depend>
 
 </package>
