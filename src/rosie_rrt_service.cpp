@@ -2,6 +2,8 @@
 #include "arduino_servo_control/SetServoAngles.h"
 #include <rosie_map_controller/RequestRerun.h>
 #include <rosie_map_controller/CommissionRerun.h>
+#include <rosie_map_controller/StartRRT.h>
+
 #include <cstdlib>
 
 int rerun_command = 0; // no rerun
