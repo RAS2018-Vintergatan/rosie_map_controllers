@@ -43,7 +43,7 @@ void lidarCallback(const sensor_msgs::LaserScan::ConstPtr& msg){
 
     tf::Transform transform;
     static tf::TransformBroadcaster br;
-    transform.setOrigin( tf::Vector3(-0.125, 0, 0.19) );
+    transform.setOrigin( tf::Vector3(-0.105, 0, 0.17) );
     tf::Quaternion qtf;
     qtf.setRPY(0, 0, 0);
     transform.setRotation( qtf );
