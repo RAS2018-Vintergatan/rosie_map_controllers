@@ -62,7 +62,7 @@ int main(int argc, char **argv)
 	ros::ServiceServer CommService = n.advertiseService<rosie_map_controller::CommissionRerun::Request, rosie_map_controller::CommissionRerun::Response>("commission_rerun", CommissionRerun);
 	ros::ServiceServer StartService = n.advertiseService<rosie_map_controller::StartRRT::Request, rosie_map_controller::StartRRT::Response>("start_rrt", StartPathPlanning);
   //ros::Subscriber sub = n.subscribe("MoveGates", 1000, GateCallback);
-  ROS_INFO("Ready to move the grippers.");
+  ROS_INFO("Ready to do path planning.");
   ros::spin();
 
   return 0;
