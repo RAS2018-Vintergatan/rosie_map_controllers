@@ -14,6 +14,7 @@
 #include <tf/transform_listener.h>
 #include <visualization_msgs/Marker.h>
 #include <iostream>
+#include <vector>
 
 #define PI 3.141592f
 #define TWO_PI 6.28319f
@@ -299,6 +300,10 @@ void localize(){
 		double transformXSum = 0;
 		double transformYSum = 0;
 		double transformYawSum = 0;
+		
+		std::vector<double> xTransforms;
+		std::vector<double> yTransforms;
+		std::vector<double> yawTransforms;
 
 		float errorSum = 0.0f;
 		int numContributions = 0;
@@ -343,6 +348,10 @@ void localize(){
 			transformXSum += diffVector.x();
 			transformYSum += diffVector.y();
 			transformYawSum += diffVector.z();
+			
+			xTransforms.push_back(diffVector.x());
+			yTransforms.push_back(diffVector.y());
+			yawTransforms.push_back(diffVector.z());
 
 			if(diffVector.x() > -0.2f && diffVector.x() < 0.2f && diffVector.y() > -0.2f && diffVector.y() < 0.2f){
 				numContributions += 3;
@@ -367,6 +376,35 @@ void localize(){
 				line_list.points.push_back(p);
 			}
 			//ROS_INFO("Diffvector! X:%f, Y:%f, Yaw:%f",diffVector.x(),diffVector.y(),diffVector.z());
+		}
+		
+		// Mean filter
+		float meanXTransform = transformXSum/numContributions;
+		float meanYTransform = transformYSum/numContributions;
+		float meanYawTransform = transformYawSum/numContributions;
+		
+		float thresholdX =  0.10f;
+		float thresholdY = 0.10f;
+		float thresholdYaw = 0.3f;
+		
+		transformXSum = 0;
+		transformYSum = 0;
+		transformYawSum = 0;
+		numContributions = 360;
+		
+		for(int i = 0; i < xTransforms.size(); ++i){
+			if(abs(xTransforms.at(i) - meanXTransform) > thresholdX){
+				continue;
+			}if(abs(yTransforms.at(i) - meanYTransform) > thresholdY){
+				continue;
+			}if(abs(yawTransforms.at(i) - meanYawTransform) > thresholdYaw){
+				continue;
+			}
+			
+			//++numContributions;
+			transformXSum += xTransforms.at(i);
+			transformYSum += yTransforms.at(i);
+			transformYawSum += yawTransforms.at(i);
 		}
 
 		float transformX = transformXSum/numContributions;
