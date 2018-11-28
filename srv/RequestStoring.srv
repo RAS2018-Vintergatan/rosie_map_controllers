@@ -1,3 +1,3 @@
-rosie_map_controllers/MapStoring Request
+MapStoring send
 ---
-int8 Response
+int8 recieve

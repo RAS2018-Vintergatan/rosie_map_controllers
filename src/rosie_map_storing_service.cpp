@@ -1,19 +1,23 @@
 #include "ros/ros.h"
+#include <rosie_map_controller/BatteryPosition.h>
+#include <rosie_map_controller/ObjectPosition.h>
+#include <rosie_map_controller/WallDefinition.h>
 #include <rosie_map_controller/MapStoring.h>
-
+#include <rosie_map_controller/RequestStoring.h>
+#include <string>
 #include <fstream>
 
 #include <cstdlib>
 
-string wallFilePath;
-string objectFilePath;
-string batteryFilePath;
+std::string wallFilePath;
+std::string objectFilePath;
+std::string batteryFilePath;
 
-bool requestRerunCallback(rosie_map_controller::RequestStoring::Request &req, rosie_map_controller::RequestStoring::Response &res){
+bool requestStoringCallback(rosie_map_controller::RequestStoring::Request &req, rosie_map_controller::RequestStoring::Response &res){
 	std::ofstream ofs;
 	
-	rosie_map_controller::WallDefinition[]& walls = req.NewWalls;
-	ofs.open(wallFilePath, std::ofstream::out);
+ 	std::vector<rosie_map_controller::WallDefinition> walls = req.send.NewWalls;
+	ofs.open(wallFilePath.c_str());
 	for(int i = 0; i < walls.size(); ++i){
 		ofs << walls[i].x1 << " " << walls[i].y1 << " ";
 		ofs << walls[i].x2 << " " << walls[i].y2 << " ";
@@ -21,8 +25,8 @@ bool requestRerunCallback(rosie_map_controller::RequestStoring::Request &req, ro
 	}
 	ofs.close();
 	
-	rosie_map_controller::ObjectPosition[]& objects = req.Objects;
-	ofs.open(objectFilePath, std::ofstream::out);
+	std::vector<rosie_map_controller::ObjectPosition> objects = req.send.Objects;
+	ofs.open(objectFilePath.c_str());
 	for(int i = 0; i < objects.size(); ++i){
 		ofs << objects[i].id << " ";
 		ofs << objects[i].x << " " << objects[i].y << " ";
@@ -31,11 +35,11 @@ bool requestRerunCallback(rosie_map_controller::RequestStoring::Request &req, ro
 	}
 	ofs.close();
 	
-	rosie_map_controller::BatteryPosition[]& batteries = req.Batteries;
-	ofs.open(batteryFilePath, std::ofstream::out);
+	std::vector<rosie_map_controller::BatteryPosition> batteries = req.send.Batteries;
+	ofs.open(batteryFilePath.c_str());
 	for(int i = 0; i < batteries.size(); ++i){
-		ofs << objects[i].x << " " << objects[i].y << " ";
-		ofs << objects[i].certainty << std::endl;
+		ofs << batteries[i].x << " " << batteries[i].y << " ";
+		ofs << batteries[i].certainty << std::endl;
 	}
 	ofs.close();
 	
@@ -44,15 +48,15 @@ bool requestRerunCallback(rosie_map_controller::RequestStoring::Request &req, ro
 
 int main(int argc, char **argv)
 {	
-  ros::init(argc, argv, "rosie_rrt_server");
+  ros::init(argc, argv, "rosie_map_storing_service");
 
   ros::NodeHandle n;
 
-  n.param<string>("wall_save_file", wallFilePath, "wall_save_file.txt");
-  n.param<string>("object_save_file", objectFilePath, "obj_save_file.txt");
-  n.param<string>("battery_save_file", batteryFilePath, "battery_save_file.txt");
+  n.param<std::string>("wall_save_file", wallFilePath, "wall_save_file.txt");
+  n.param<std::string>("object_save_file", objectFilePath, "obj_save_file.txt");
+  n.param<std::string>("battery_save_file", batteryFilePath, "battery_save_file.txt");
   
-  ros::ServiceServer storeService = n.advertiseService<rosie_map_controller::RequestStoring::Request, rosie_map_controller::RequestStoring::Response>("request_rerun", requestStoringCallback);
+  ros::ServiceServer storeService = n.advertiseService<rosie_map_controller::RequestStoring::Request, rosie_map_controller::RequestStoring::Response>("request_store_map", requestStoringCallback);
   ros::spin();
 
   return 0;
