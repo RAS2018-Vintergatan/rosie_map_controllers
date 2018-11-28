@@ -16,6 +16,9 @@
 
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
+#include <rosie_map_updater/GetGrid.h>
+#include <rosie_map_controller/CommissionRerun.h>
+
 
 float pi = 3.14159265359;
 float resolution;
@@ -154,20 +157,34 @@ int main(int argc, char **argv){
     map_sub = n.subscribe<visualization_msgs::MarkerArray>("/maze_map", 1, initializeMap);
 		grid_publisher = n.advertise<nav_msgs::OccupancyGrid>("/rosie_occupancy_grid",1);
 		//wall_publisher = n.advertise<std_msgs::Float32*>("/walls",1);
+		ros::ServiceClient mapClient = n.serviceClient<rosie_map_updater::GetGrid>("get_updated_grid");
+		ros::ServiceClient recalcClient = n.serviceClient<rosie_map_controller::CommissionRerun>("commission_rerun");
+		rosie_map_controller::CommissionRerun recalcSrv;
+		rosie_map_updater::GetGrid mapSrv;
 
     ros::Rate loop_rate(5);
+
 
 	static tf::TransformBroadcaster br;
 
 	load_time = ros::Time::now();
 	int seq = 0;
+	bool isUpdate = 0;
 	while(ros::ok()){
 		if(!mapInitialized){
 		    ros::spinOnce();
 	    	loop_rate.sleep();
 			continue;
 		}
-
+		mapSrv.request.question = 1;
+		if(mapClient.call(mapSrv)){
+			if(mapSrv.response.answer){
+				for(int i = 0; i<width*height;i++){
+					occGrid[i].data = mapSrv.response.newGrid.data[i];
+					isUpdate = 1;
+				}
+			}
+		}
 		nav_msgs::OccupancyGrid mapgrid;
 
 		mapgrid.header.seq = seq++;
@@ -209,6 +226,16 @@ int main(int argc, char **argv){
 		qtf.setRPY(0, 0, 0);
 		transform.setRotation( qtf );
 		br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "world", "map"));
+
+		if(isUpdate){
+			recalcSrv.request.command = 1;
+			if(recalcClient.call(recalcSrv)){
+				if(recalcSrv.response.answer){
+					ROS_INFO("updated map - commissioned a path recalculation");
+					isUpdate = 0;
+				}
+			}
+		}
 
 	    ros::spinOnce();
 
