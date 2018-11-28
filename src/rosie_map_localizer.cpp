@@ -217,8 +217,9 @@ tf::Vector3 getCorrectionFromPoint(tf::Vector3 point, tf::Vector3 centerPoint, n
 					float distance = sqrt(pow(i,2)+pow(j,2));
 					if(smallestDistance < 0 || distance < smallestDistance){
 						smallestDistance = distance;
-						smallestY = sy;
 						smallestX = sx;
+						smallestY = sy;
+
 						int absi = i < 0 ? -i:i;
 						int absj = j < 0 ? -j:j;
 						if(absi < absj){
@@ -410,7 +411,9 @@ int main(int argc, char **argv){
     ros::Subscriber grid_sub = n.subscribe<nav_msgs::OccupancyGrid>("/rosie_occupancy_grid",1, gridCallback);
 
 	load_time = ros::Time::now();
-	ros::Rate loop_rate(100);
+
+	ros::Rate loop_rate(50);
+
 
 	while(ros::ok()){
 		if(odomGotten && occGridGotten && lidarGotten){

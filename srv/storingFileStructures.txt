@@ -1,0 +1,13 @@
+new walls:
+x1 y1 x2 y2 certainty
+1.02 2.32 1.00 1.00 5
+
+object positions:
+id x y value stringName
+1 -1 -1 -1 Patric
+2 1.02 1.54 -1 RedCube
+2 1.32 1.24 10 BlueStar
+
+battery positions:
+x y certainty
+1.12 1.14 8
