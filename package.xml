@@ -1,4 +1,6 @@
-<package>
+<?xml version="1.0"?>
+
+<package format="1">
  <name>rosie_map_controller</name>
   <version>0.1.0</version>
   <description>
@@ -7,6 +9,8 @@
   <license>BSD</license>
 
   <maintainer email="niewalda@kth.se">Tobias Niewalda</maintainer>
+  <author email="niewalda@kth.se">Tobias Niewalda</author>
+  <author email="fhyy@kth.se">Fredrik Hyyrynen</author>
 
   <buildtool_depend>catkin</buildtool_depend>
 
@@ -22,8 +26,11 @@
   <build_depend>laser_geometry</build_depend>
   <build_depend>pcl_ros</build_depend>
   <build_depend>visualization_msgs</build_depend>
-
-	<run_depend>message_runtime</run_depend>
+  <build_depend>roslib</build_depend>
+  <build_depend>nav_msgs</build_depend>
+  
+  <run_depend>message_runtime</run_depend>
+  <run_depend>nav_msgs</run_depend>
   <run_depend>roscpp</run_depend>
   <run_depend>rospy</run_depend>
   <run_depend>std_msgs</run_depend>
@@ -34,7 +41,8 @@
   <run_depend>message_filters</run_depend>
   <run_depend>laser_geometry</run_depend>
   <run_depend>pcl_ros</run_depend>
- <run_depend>visualization_msgs</run_depend>
+  <run_depend>visualization_msgs</run_depend>
+  <run_depend>roslib</run_depend>
+
 
 </package>
-

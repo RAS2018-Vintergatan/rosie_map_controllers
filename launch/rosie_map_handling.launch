@@ -4,7 +4,7 @@
 	<node pkg="rosie_map_controller" type="rosie_map_storing_service" name="map_storing_service" args="wall_save_file:=$(find rosie_map_controller)/maps/wall_save_file.txt object_save_file:=$(find rosie_map_controller)/maps/object_save_file.txt battery_save_file:=$(find rosie_map_controller)/maps/battery_save_file.txt"/>
 
 	<!-- load the map -->	
-	<node pkg="ras_maze_map" type="ras_maze_map_node" name="ras_maze_map_node" args="_map_file:=$(find ras_maze_map)/maps/empty_maze.txt"/>
+	<node pkg="ras_maze_map" type="ras_maze_map_node" name="ras_maze_map_node" args="_map_file:=$(find ras_maze_map)/maps/lab_maze_2018.txt"/>
 
 	<!-- run the map provider -->
 	<node pkg="rosie_map_controller" type="rosie_map_provider" name="rosie_map_provider"/>

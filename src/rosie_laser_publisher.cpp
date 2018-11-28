@@ -6,7 +6,6 @@
 #include <sensor_msgs/PointCloud.h>
 #include <tf/transform_broadcaster.h>
 #include <geometry_msgs/PointStamped.h>
-#include <laser_geometry/laser_geometry.h>
 #include <string>
 #include <math.h>
 #include <iostream>
@@ -26,7 +25,7 @@ std::vector<float> ranges_y(360,0);
 float pi = 3.14159265359;
 
 void lidarCallback(const sensor_msgs::LaserScan::ConstPtr& msg){
-  
+
     ranges = msg->ranges;
     angle_increment = msg->angle_increment;
     time_increment = msg->time_increment;
@@ -44,15 +43,15 @@ void lidarCallback(const sensor_msgs::LaserScan::ConstPtr& msg){
 
     tf::Transform transform;
     static tf::TransformBroadcaster br;
-    transform.setOrigin( tf::Vector3(-0.125, 0, 0.19) );
+    transform.setOrigin( tf::Vector3(-0.105, 0, 0.17) );
     tf::Quaternion qtf;
     qtf.setRPY(0, 0, 0);
     transform.setRotation( qtf );
     br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "base_link", "laser_frame"));
-/*	
+/*
   std::cout << "D-Values";
   std::copy(ranges.begin(), ranges.end(), std::ostream_iterator<float>(std::cout, " "));
-  std::cout << std::endl;    
+  std::cout << std::endl;
   std::cout << "X-Values";
   std::copy(ranges_x.begin(), ranges_x.end(), std::ostream_iterator<float>(std::cout, " "));
   std::cout << std::endl;
@@ -67,12 +66,12 @@ int main(int argc, char **argv){
     ros::init(argc, argv, "laser_publisher");
 
     ros::NodeHandle n;
- 
-    ros::Subscriber scan_sub = n.subscribe<sensor_msgs::LaserScan>("/scan", 10, lidarCallback); 
+
+    ros::Subscriber scan_sub = n.subscribe<sensor_msgs::LaserScan>("/scan", 10, lidarCallback);
     ros::Publisher point_cloud_publisher = n.advertise<sensor_msgs::PointCloud>("/my_cloud",100);
 
     ros::Rate loop_rate(10);
- 
+
     tf::TransformListener listener;
 
     while(ros::ok()){
@@ -87,7 +86,7 @@ int main(int argc, char **argv){
     cloud.channels[0].name = "intensities";
     cloud.channels[0].values.resize(360);
     for(unsigned int i = 0; i<360; i++){
-	cloud.points[i].z = 0; 
+	cloud.points[i].z = 0;
     	cloud.points[i].x = ranges_x[i];
     	cloud.points[i].y = ranges_y[i];
         cloud.channels[0].values[i] = intensities[i];
@@ -96,7 +95,7 @@ int main(int argc, char **argv){
    // listener.lookupTransform("my_cloud", "laser_frame", ros::Time(0),(-0.125,0,0.19,1));
     //pcl_ros::transformPointCloud(cloud, buffer, (-0.125,0,0.19,1));
 
-    point_cloud_publisher.publish(cloud);   
+    point_cloud_publisher.publish(cloud);
 
     ros::spinOnce();
     loop_rate.sleep();

@@ -30,6 +30,7 @@ nav_msgs::Odometry odom;
 
 ros::Publisher pose_pub;
 ros::Publisher localisationVisualisationPublisher;
+ros::Publisher certainty_pub;
 
 char odomGotten = 0;
 char occGridGotten = 0;
@@ -54,7 +55,7 @@ void gridCallback(nav_msgs::OccupancyGrid msg){
 	occGridGotten = 1;
 }
 
-void lidarCallback(sensor_msgs::PointCloud msg){	
+void lidarCallback(sensor_msgs::PointCloud msg){
 	*lastPointCloud_ptr = msg;
 	try{
 		(*laser_tfl_ptr).waitForTransform("world", msg.header.frame_id, ros::Time(0), ros::Duration(10.0));
@@ -99,7 +100,7 @@ int getOccGridValue(int x, int y){
 }
 
 void publishCorrection(float correctionX, float correctionY, float correctionAngle){
-	
+
 	//ROS_INFO("Correction! X:%f, Y:%f, Yaw:%f",correctionX,correctionY,correctionAngle);
 
 	geometry_msgs::PoseStamped correctionPose;
@@ -120,7 +121,7 @@ void publishCorrection(float correctionX, float correctionY, float correctionAng
 }
 
 char isPointInside(const int& x, const int& y, const int& gridWidth, const int& gridHeight){
-	if(x >= 0 && x < gridWidth && y >= 0 && y < gridHeight) 
+	if(x >= 0 && x < gridWidth && y >= 0 && y < gridHeight)
 		return 1;
 	return 0;
 }
@@ -174,7 +175,7 @@ tf::Vector3 getCorrectionFromPoint(tf::Vector3 point, tf::Vector3 centerPoint, n
 
 		int x4 = pointGridX;
 		int y4 = pointGridY - searchSize;
-		
+
 		if(!isPointInside(x1, y1, gridWidth, gridHeight) ||
 			!isPointInside(x2, y2, gridWidth, gridHeight) ||
 			!isPointInside(x3, y3, gridWidth, gridHeight) ||
@@ -191,7 +192,7 @@ tf::Vector3 getCorrectionFromPoint(tf::Vector3 point, tf::Vector3 centerPoint, n
 			}
 		}
 	}
-	
+
 	//Search for absolute smallest distance
 	float smallestDistance = -1;
 	int smallestX = pointGridX;
@@ -218,6 +219,7 @@ tf::Vector3 getCorrectionFromPoint(tf::Vector3 point, tf::Vector3 centerPoint, n
 						smallestDistance = distance;
 						smallestX = sx;
 						smallestY = sy;
+
 						int absi = i < 0 ? -i:i;
 						int absj = j < 0 ? -j:j;
 						if(absi < absj){
@@ -237,23 +239,23 @@ tf::Vector3 getCorrectionFromPoint(tf::Vector3 point, tf::Vector3 centerPoint, n
 										 pointFromCenterPoint.y() + returnVector.y(),
 										 0);
 	returnVector.setZ(capAngle(atan2(newPointFromCenterPoint.y(),newPointFromCenterPoint.x()) - atan2(pointFromCenterPoint.y(),pointFromCenterPoint.x())));
-	
+
 	return returnVector;
 }
 
 geometry_msgs::Point32 getMedianPointByDistance(const geometry_msgs::Point32& p1, const geometry_msgs::Point32& p2, const geometry_msgs::Point32& p3){
-	
+
 	if(std::isnan(p1.x) || std::isnan(p1.y) ||
 		std::isnan(p3.x) || std::isnan(p3.y)){
 		return p2;
 	}else if(std::isnan(p2.x) || std::isnan(p2.y)){
 		return p1;
 	}
-	
+
 	double dist1 = sqrt(p1.x*p1.x + p1.y*p1.y);
 	double dist2 = sqrt(p2.x*p2.x + p2.y*p2.y);
 	double dist3 = sqrt(p3.x*p3.x + p3.y*p3.y);
-	
+
 	if(dist1 < dist2 && dist2 < dist3){
 		return p2;
 	}else if(dist3 < dist2 && dist2 < dist1){
@@ -287,79 +289,112 @@ void localize(){
 	line_list.header.stamp = ros::Time::now();
 	line_list.header.frame_id = "world";
 
-	double transformXSum = 0;
-	double transformYSum = 0;
-	double transformYawSum = 0;
-
 	tf::Vector3 odomPoint(odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z);
 
-	int numContributions = 0;
-	for(int i = 0; i < 360; i+=1){
-		geometry_msgs::Point32 pointInCloud = getMedianPointByDistance(
-																		getCyclicPointCloudElement(i-1,360),
-																		getCyclicPointCloudElement(i,360),
-																		getCyclicPointCloudElement(i+1,360)
-																	);
-		
-		if(std::isnan(pointInCloud.x) || std::isnan(pointInCloud.y) || std::isnan(pointInCloud.z)){
-			continue;
-		}
+	float bestScore = -1.0;
+	float bestXTransform = 0.0f;
+	float bestYTransform = 0.0f;
+	float bestRotation = 0.0f;
+	for(float initialRotation = -1.14; initialRotation < 1.14; initialRotation += 0.1f){
 
-		tf::Vector3 point(pointInCloud.x,pointInCloud.y,pointInCloud.z);
-		
-		if(std::isnan(point.x()) || std::isnan(point.y()) || std::isnan(point.z())){
-			continue;
-		}
+		double transformXSum = 0;
+		double transformYSum = 0;
+		double transformYawSum = 0;
 
-		tf::Vector3 point_tf = (*laser_point_tf_ptr) * point;
+		float errorSum = 0.0f;
+		int numContributions = 0;
+		for(int i = 0; i < 360; i+=1){
+			geometry_msgs::Point32 pointInCloud = getMedianPointByDistance(
+																			getCyclicPointCloudElement(i-1,360),
+																			getCyclicPointCloudElement(i,360),
+																			getCyclicPointCloudElement(i+1,360)
+																		);
 
-		tf::Vector3 diffVector = getCorrectionFromPoint(point_tf, odomPoint, occGrid);
+			if(std::isnan(pointInCloud.x) || std::isnan(pointInCloud.y) || std::isnan(pointInCloud.z)){
+				continue;
+			}
 
-		if(isnan(diffVector.z())){
-			continue;
-		}	
-		
-		if((diffVector.x() < -1.0f || diffVector.x() > 1.0f) && (diffVector.y() < -1.0f || diffVector.y() > 1.0f)){
-			continue;
-		}
-			
-		++numContributions;
-		transformXSum += diffVector.x();
-		transformYSum += diffVector.y();
-		transformYawSum += diffVector.z();
-		
-		if(diffVector.x() > -0.2f && diffVector.x() < 0.2f && diffVector.y() > -0.2f && diffVector.y() < 0.2f){
-			numContributions += 3;
-			transformXSum += diffVector.x()*3;
-			transformYSum += diffVector.y()*3;
-			transformYawSum += diffVector.z()*3;
-		}
-		if(sqrt(point.x()*point.x() + point.y()*point.y()) < 0.5){
+			tf::Vector3 point(pointInCloud.x*cos(initialRotation)-pointInCloud.y*sin(initialRotation),
+									 pointInCloud.x*sin(initialRotation)+pointInCloud.y*cos(initialRotation),
+									 pointInCloud.z);
+
+			/*tf::Vector3 point(pointInCloud.x,
+									 pointInCloud.y,
+									 pointInCloud.z);*/
+
+			if(std::isnan(point.x()) || std::isnan(point.y()) || std::isnan(point.z())){
+				continue;
+			}
+
+			tf::Vector3 point_tf = (*laser_point_tf_ptr) * point;
+
+			tf::Vector3 diffVector = getCorrectionFromPoint(point_tf, odomPoint, occGrid);
+
+			if(isnan(diffVector.z())){
+				continue;
+			}
+
+			if((diffVector.x() < -1.0f || diffVector.x() > 1.0f) && (diffVector.y() < -1.0f || diffVector.y() > 1.0f)){
+				continue;
+			}
+
+			errorSum += sqrt(pow(diffVector.x(),2) + pow(diffVector.y(),2));
+
 			++numContributions;
 			transformXSum += diffVector.x();
 			transformYSum += diffVector.y();
 			transformYawSum += diffVector.z();
+
+			if(diffVector.x() > -0.2f && diffVector.x() < 0.2f && diffVector.y() > -0.2f && diffVector.y() < 0.2f){
+				numContributions += 3;
+				transformXSum += diffVector.x()*3;
+				transformYSum += diffVector.y()*3;
+				transformYawSum += diffVector.z()*3;
+			}
+			if(sqrt(pow(point.x(),2) + pow(point.y(),2)) < 0.5){
+				++numContributions;
+				transformXSum += diffVector.x();
+				transformYSum += diffVector.y();
+				transformYawSum += diffVector.z();
+			}
+
+			if(initialRotation > -0.05 && initialRotation < 0.05){
+				geometry_msgs::Point p;
+				p.x = point_tf.x();
+				p.y = point_tf.y();
+				line_list.points.push_back(p);
+				p.x += diffVector.x();
+				p.y += diffVector.y();
+				line_list.points.push_back(p);
+			}
+			//ROS_INFO("Diffvector! X:%f, Y:%f, Yaw:%f",diffVector.x(),diffVector.y(),diffVector.z());
 		}
-		
-		geometry_msgs::Point p;
-		p.x = point_tf.x();
-		p.y = point_tf.y();
-		line_list.points.push_back(p);
-		p.x += diffVector.x();
-		p.y += diffVector.y();
-		line_list.points.push_back(p);
-		//ROS_INFO("Diffvector! X:%f, Y:%f, Yaw:%f",diffVector.x(),diffVector.y(),diffVector.z());
+
+		float transformX = transformXSum/numContributions;
+		float transformY = transformYSum/numContributions;
+		float transformYaw = transformYawSum/numContributions;
+		errorSum /= numContributions;
+		float score = sqrt(pow(transformX,2) + pow(transformY,2));
+		if(bestScore < 0 || errorSum < bestScore){
+			bestRotation = capAngle(initialRotation+transformYaw)/5;
+			bestXTransform = transformX;
+			bestYTransform = transformY;
+			bestScore = errorSum;
+		}
 	}
 	//ROS_INFO("Correction Sum! X:%f, Y:%f, Yaw:%f",transformXSum,transformYSum,transformYawSum);
-	publishCorrection(transformXSum/numContributions,transformYSum/numContributions,transformYawSum/numContributions);
-	
+	ROS_INFO("BestScore: %f, bestRotation: %f, bestX: %f, bestY: %f", bestScore, bestRotation, bestXTransform, bestYTransform);
+	publishCorrection(bestXTransform,bestYTransform,bestRotation);
+	std_msgs::Float32 finalScore;
+	finalScore.data = bestScore;
+	certainty_pub.publish(finalScore);
 	localisationVisualisationPublisher.publish(line_list);
 }
 
 int main(int argc, char **argv){
     ros::init(argc, argv, "rosie_map_localizer");
 
-	
+
 	laser_tfl_ptr.reset(new tf::TransformListener);
 	laser_point_tf_ptr.reset(new tf::StampedTransform);
 	lastPointCloud_ptr.reset(new sensor_msgs::PointCloud);
@@ -369,13 +404,16 @@ int main(int argc, char **argv){
     ros::Subscriber odom_sub = n.subscribe<nav_msgs::Odometry>("/odom",100,odomCallback);
 	pose_pub = n.advertise<geometry_msgs::PoseStamped>("/pose_correction",1);
 	localisationVisualisationPublisher = n.advertise<visualization_msgs::Marker>("/localisation_lines",1);
+	certainty_pub = n.advertise<std_msgs::Float32>("/localization_certainty",1);
 	//Subscribe to transformed LIDAR point cloud (Fixed to robot frame)
 	ros::Subscriber scan_sub = n.subscribe<sensor_msgs::PointCloud>("/my_cloud",5,lidarCallback);
 	//Subscribe to UPDATED Map
     ros::Subscriber grid_sub = n.subscribe<nav_msgs::OccupancyGrid>("/rosie_occupancy_grid",1, gridCallback);
 
 	load_time = ros::Time::now();
+
 	ros::Rate loop_rate(50);
+
 
 	while(ros::ok()){
 		if(odomGotten && occGridGotten && lidarGotten){
