@@ -21,9 +21,10 @@ generate_messages(
   std_msgs
 )
 
+
 catkin_package(
   DEPENDS
-  CATKIN_DEPENDS roscpp rospy std_msgs phidgets geometry_msgs visualization_msgs sensor_msgs tf message_filters laser_geometry pcl_ros
+  CATKIN_DEPENDS roscpp std_msgs phidgets nav_msgs geometry_msgs visualization_msgs sensor_msgs tf message_filters laser_geometry pcl_ros
   LIBRARIES
 )
 
@@ -33,20 +34,13 @@ include_directories(
 )
 
 add_executable(rosie_laser_publisher src/rosie_laser_publisher.cpp)
-add_executable(rosie_map_provider src/rosie_map_provider.cpp)
 add_executable(rosie_map_localizer src/rosie_map_localizer.cpp)
-add_executable(rosie_map_storing_service	 src/rosie_map_storing_service.cpp)
-#add_executable(rosie_obj2map src/rosie_obj2map.cpp)
-#add_executable(rosie_map_updater src/rosie_map_updater.cpp)
-#add_executable(rosie_rrt src/rosie_rrt.cpp)
-#target_link_libraries(rosie_rrt ${catkin_LIBRARIES})
-#target_link_libraries(rosie_map_updater ${catkin_LIBRARIES})
+add_executable(rosie_map_storing_service src/rosie_map_storing_service.cpp)
+add_executable(rosie_map_provider src/rosie_map_provider.cpp)
 target_link_libraries(rosie_laser_publisher ${catkin_LIBRARIES})
 target_link_libraries(rosie_map_localizer ${catkin_LIBRARIES})
-#target_link_libraries(rosie_obj2map ${catkin_LIBRARIES})
 target_link_libraries(rosie_map_provider ${catkin_LIBRARIES})
 target_link_libraries(rosie_map_storing_service ${catkin_LIBRARIES})
-#add_dependencies(rosie_laser_publisher rosie_obj2map rosie_map_provider std_msgs phidgets geometry_msgs visualization_msgs sensor_msgs tf message_filters laser_geometry )
 add_dependencies(rosie_laser_publisher ${catkin_EXPORTED_TARGETS})
 add_dependencies(rosie_map_provider ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(rosie_map_storing_service ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
