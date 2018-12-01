@@ -9,11 +9,13 @@ add_message_files(
   ObjectPosition.msg
   BatteryPosition.msg
   MapStoring.msg
+  ObjectStoring.msg
 )
 
 add_service_files(
   FILES
-  RequestStoring.srv
+  RequestMapStoring.srv
+  RequestObjStoring.srv
   RequestLoading.srv
 )
 

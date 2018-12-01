@@ -1,3 +1,4 @@
 int8 request
 ---
 MapStoring mappings
+ObjectStoring objects

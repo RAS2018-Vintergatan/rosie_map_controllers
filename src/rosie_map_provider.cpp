@@ -134,7 +134,7 @@ void initializeMap(const visualization_msgs::MarkerArray msg){
 			int px = (int)((d*((x2-x1)/wallDist)+x1)/resolution);
 			int py = (int)((d*((y2-y1)/wallDist)+y1)/resolution);
 
-			occGrid[py*width+px].data = 125;			
+			occGrid[py*width+px].data = 125;
 
 			for(int y = -czone; y <= czone; y++){
 				for(int x = -czone; x <= czone; x++){
