@@ -11,6 +11,8 @@
 #include <iostream>
 #include <pcl_ros/transforms.h>
 
+#define PI 3.14159265359
+
 std::vector<float> ranges(360,0);
 std::vector<float> intensities(360,0);
 float angle_increment;
@@ -22,7 +24,6 @@ float range_min;
 float range_max;
 std::vector<float> ranges_x(360,0);
 std::vector<float> ranges_y(360,0);
-float pi = 3.14159265359;
 
 void lidarCallback(const sensor_msgs::LaserScan::ConstPtr& msg){
 
@@ -37,13 +38,13 @@ void lidarCallback(const sensor_msgs::LaserScan::ConstPtr& msg){
     intensities = msg->intensities;
 
     for(int i=0; i<=359; i++){
-	ranges_x[i] = ranges[i]*cos(-1.0*((double)(i-182)/180.0)*pi);
-	ranges_y[i] = ranges[i]*sin(((double)(i-182)/180.0)*pi);
+	ranges_x[i] = ranges[i]*cos(-1.0*((double)(i)/180.0)*PI);
+	ranges_y[i] = ranges[i]*sin(((double)(i)/180.0)*PI);
     }
 
     tf::Transform transform;
     static tf::TransformBroadcaster br;
-    transform.setOrigin( tf::Vector3(-0.12, 0, 0.17) );
+    transform.setOrigin( tf::Vector3(-0.01, 0, 0.17) );
     tf::Quaternion qtf;
     qtf.setRPY(0, 0, 0);
     transform.setRotation( qtf );
