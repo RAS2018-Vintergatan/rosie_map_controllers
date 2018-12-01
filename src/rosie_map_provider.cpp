@@ -38,7 +38,13 @@ static ros::Publisher wall_publisher;
 ros::Time load_time;
 
 char mapInitialized = 0;
+char mapInitializing = 0;
 void initializeMap(const visualization_msgs::MarkerArray msg){
+	if(mapInitializing){
+		return;
+	}
+	mapInitializing = 1;
+
 	ROS_INFO("Initializing!");
 
 	map_sub = ros::Subscriber();
