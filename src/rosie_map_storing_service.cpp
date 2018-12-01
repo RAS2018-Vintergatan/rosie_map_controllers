@@ -82,15 +82,19 @@ bool requestLoadingCallback(rosie_map_controller::RequestLoading::Request &req, 
 		res.mappings.NewWalls.push_back(wall);
 	}
 
+	std::ifstream obj_fs;
+
 	//std::string line;
-	map_fs.open(objectFilePath.c_str());
-	while(getline(map_fs, line)){
+	obj_fs.open(objectFilePath.c_str());
+	ROS_INFO("OBJ: %s", objectFilePath.c_str());
+	while(getline(obj_fs, line)){
+		ROS_INFO("OBJ: %s", line);
 		int id;
 		double x = -1, y = -1;
 		int value = 0;
 		std::string name;
 
-		std::istringstream line_stream(line);
+		std::istringstream line_stream(line.c_str());
 
 		line_stream >> id >> x >> y >> value >> name;
 
@@ -104,13 +108,17 @@ bool requestLoadingCallback(rosie_map_controller::RequestLoading::Request &req, 
 		res.objects.Objects.push_back(object);
 	}
 
-	map_fs.open(batteryFilePath.c_str());
+	std::ifstream bat_fs;
+
+	bat_fs.open(batteryFilePath.c_str());
+	ROS_INFO("BAT: %s", batteryFilePath.c_str());
 	//std::string line;
-	while(getline(map_fs, line)){
+	while(getline(bat_fs, line)){
+		ROS_INFO("BAT: %s", line);
 		double x = -1, y = -1;
 		int certainty = 0;
 
-		std::istringstream line_stream(line);
+		std::istringstream line_stream(line.c_str());
 
 		line_stream >> x >> y >> certainty;
 
