@@ -282,7 +282,7 @@ geometry_msgs::Point32 getCyclicPointCloudElement(int index, int max){
 int getIndexOfMedianTransform(const std::vector<double>& xTransforms, const std::vector<double>& yTransforms, const std::vector<double>& yawTransforms){
 	int medianIndex = 0;
 	double bestSum = -1;
-	for(int i = 0; i < xTransforms.size(); ++i){
+	for(int i = 0; i < xTransforms.size(); i+=5){
 		double sum = 0.0;
 		for(int j = 0; j < xTransforms.size(); ++j){
 			double xDiff = xTransforms.at(i)-xTransforms.at(j);
@@ -298,6 +298,14 @@ int getIndexOfMedianTransform(const std::vector<double>& xTransforms, const std:
 	return medianIndex;
 }
 
+char pointInWallCSpace(tf::Vector3 point, nav_msgs::OccupancyGrid wallGrid){
+	int gridWidth = wallGrid.info.width;
+	float gridResolution = wallGrid.info.resolution;
+	int pointGridX = getGridX(point.x(), gridResolution);
+	int pointGridY = getGridY(point.y(), gridResolution);
+	return wallGrid.data[pointGridY*gridWidth + pointGridX] > 120;
+}
+
 void localize(){
 
 	visualization_msgs::Marker line_list;
@@ -311,13 +319,16 @@ void localize(){
 
 	tf::Vector3 odomPoint(odom.pose.pose.position.x, odom.pose.pose.position.y, odom.pose.pose.position.z);
 
+	float bestCertainty = -1.0;
 	float bestScore = -1.0;
 	float bestXTransform = 0.0f;
 	float bestYTransform = 0.0f;
 	float bestRotation = 0.0f;
+	float xOffset = 0.0f;
+	float yOffset = 0.0f;
 	for(float initialRotation = -1.14; initialRotation < 1.14; initialRotation += 0.1f){
-		for(double xOffset = -0.2; xOffset <= 0.2; xOffset += 0.2){
-			for(double yOffset = -0.2; yOffset >= 0.2; yOffset += 0.2){
+		/*for(xOffset = -0.2; xOffset <= 0.2; xOffset += 0.2){
+			for(yOffset = -0.2; yOffset <= 0.2; yOffset += 0.2){*/
 
 				double transformXSum = 0;
 				double transformYSum = 0;
@@ -327,6 +338,7 @@ void localize(){
 				std::vector<double> yTransforms;
 				std::vector<double> yawTransforms;
 
+				float certainty = 0.0f;
 				float errorSum = 0.0f;
 				int numContributions = 0;
 				for(int i = 0; i < 360; i+=1){
@@ -354,17 +366,25 @@ void localize(){
 
 					tf::Vector3 point_tf = (*laser_point_tf_ptr) * point;
 
+					//if(!pointInWallCSpace(point_tf, occGrid)){
+					//	continue;
+					//}
+
 					tf::Vector3 diffVector = getCorrectionFromPoint(point_tf, odomPoint, occGrid);
 
 					if(isnan(diffVector.z())){
 						continue;
 					}
 
-					if((diffVector.x() < -1.0f || diffVector.x() > 1.0f) && (diffVector.y() < -1.0f || diffVector.y() > 1.0f)){
-						continue;
-					}
 
-					errorSum += sqrt(pow(diffVector.x(),2) + pow(diffVector.y(),2));
+					float dist = sqrt(pow(diffVector.x(),2) + pow(diffVector.y(),2));
+					certainty += dist;
+
+					/*if((diffVector.x() < -1.0f || diffVector.x() > 1.0f) && (diffVector.y() < -1.0f || diffVector.y() > 1.0f)){
+						continue;
+					}*/
+
+					errorSum += dist;
 
 					++numContributions;
 					transformXSum += diffVector.x();
@@ -375,7 +395,7 @@ void localize(){
 					yTransforms.push_back(diffVector.y());
 					yawTransforms.push_back(diffVector.z());
 
-					if(diffVector.x() > -0.2f && diffVector.x() < 0.2f && diffVector.y() > -0.2f && diffVector.y() < 0.2f){
+					if(diffVector.x() < -0.2f && diffVector.x() < 0.2f && diffVector.y() < -0.2f && diffVector.y() > 0.2f){
 						numContributions += 3;
 						transformXSum += diffVector.x()*3;
 						transformYSum += diffVector.y()*3;
@@ -411,9 +431,9 @@ void localize(){
 				float meanYTransform = transformYSum/numContributions;
 				float meanYawTransform = transformYawSum/numContributions;
 				
-				float thresholdX =  0.10f;
-				float thresholdY = 0.10f;
-				float thresholdYaw = 0.3f;
+				float thresholdX =  0.05f+certainty/10;
+				float thresholdY = 0.05f+certainty/10;
+				float thresholdYaw = 0.2f;
 				
 				transformXSum = 0;
 				transformYSum = 0;
@@ -440,14 +460,15 @@ void localize(){
 				float transformYaw = transformYawSum/numContributions;
 				errorSum /= numContributions;
 				float score = sqrt(pow(transformX,2) + pow(transformY,2));
-				if(bestScore < 0 || errorSum < bestScore){
+				if(bestCertainty < 0 || certainty < bestCertainty){
 					bestRotation = capAngle(initialRotation+transformYaw)/5;
-					bestXTransform = transformX + xOffset;
-					bestYTransform = transformY + yOffset;
+					bestXTransform = (transformX + xOffset);
+					bestYTransform = (transformY + yOffset);
+					bestCertainty = certainty;
 					bestScore = errorSum;
 				}
-			}
-		}
+		//	}
+		//}
 	}
 	//ROS_INFO("Correction Sum! X:%f, Y:%f, Yaw:%f",transformXSum,transformYSum,transformYawSum);
 	ROS_INFO("BestScore: %f, bestRotation: %f, bestX: %f, bestY: %f", bestScore, bestRotation, bestXTransform, bestYTransform);
