@@ -378,7 +378,6 @@ void localize(){
 
 
 					float dist = sqrt(pow(diffVector.x(),2) + pow(diffVector.y(),2));
-					certainty += dist;
 
 					/*if((diffVector.x() < -1.0f || diffVector.x() > 1.0f) && (diffVector.y() < -1.0f || diffVector.y() > 1.0f)){
 						continue;
@@ -448,7 +447,10 @@ void localize(){
 					}if(abs(yawTransforms.at(i) - medianYawTransform) > thresholdYaw){
 						continue;
 					}
-					
+
+					float dist = sqrt(pow(xTransforms.at(i),2) + pow(yTransforms.at(i),2));
+					certainty += dist;					
+
 					//++numContributions;
 					transformXSum += xTransforms.at(i);
 					transformYSum += yTransforms.at(i);

@@ -62,6 +62,7 @@ bool requestLoadingCallback(rosie_map_controller::RequestLoading::Request &req, 
 	std::ifstream map_fs;
 
 	map_fs.open(wallFilePath.c_str());
+		ROS_ERROR("Load line %s", wallFilePath.c_str());
 	std::string line;
 	while(getline(map_fs, line)){
 		double x1 = -1, x2 = -1,
@@ -139,9 +140,9 @@ int main(int argc, char **argv)
 
   ros::NodeHandle n;
 
-  n.param<std::string>("wall_save_file", wallFilePath, "wall_save_file.txt");
-  n.param<std::string>("object_save_file", objectFilePath, "obj_save_file.txt");
-  n.param<std::string>("battery_save_file", batteryFilePath, "battery_save_file.txt");
+  n.param<std::string>("wall_save_file", wallFilePath, "~/catkin_ws/wall_save_file.txt");
+  n.param<std::string>("object_save_file", objectFilePath, "~/catkin_ws/obj_save_file.txt");
+  n.param<std::string>("battery_save_file", batteryFilePath, "~/catkin_ws/battery_save_file.txt");
 
   //Storing:
   ros::ServiceServer storeMapService = n.advertiseService<rosie_map_controller::RequestMapStoring::Request, rosie_map_controller::RequestMapStoring::Response>("request_store_mapping", requestMapStoringCallback);
