@@ -278,6 +278,25 @@ geometry_msgs::Point32 getCyclicPointCloudElement(int index, int max){
 	return lastPointCloud_ptr->points[index];
 }
 
+int getIndexOfMedianTransform(const std::vector<double>& xTransforms, const std::vector<double>& yTransforms, const std::vector<double>& yawTransforms){
+	int medianIndex = 0;
+	double bestSum = -1;
+	for(int i = 0; i < xTransforms.size(); ++i){
+		double sum = 0.0;
+		for(int j = 0; j < xTransforms.size(); ++j){
+			double xDiff = xTransforms.at(i)-xTransforms.at(j);
+			double yDiff = yTransforms.at(i)-yTransforms.at(j);
+			double dist = sqrt(pow(xDiff,2) + pow(yDiff,2));
+			sum += dist;
+		}
+		if(sum < bestSum || bestSum < 0){
+			bestSum = sum;
+			medianIndex = i;
+		}
+	}
+	return medianIndex;
+}
+
 void localize(){
 
 	visualization_msgs::Marker line_list;
@@ -378,6 +397,12 @@ void localize(){
 			//ROS_INFO("Diffvector! X:%f, Y:%f, Yaw:%f",diffVector.x(),diffVector.y(),diffVector.z());
 		}
 		
+		// Median filter
+		int medianIndex = getIndexOfMedianTransform(xTransforms, yTransforms, yawTransforms);
+		float medianXTransform = xTransforms.at(medianIndex);
+		float medianYTransform = yTransforms.at(medianIndex);
+		float medianYawTransform = yawTransforms.at(medianIndex);
+		
 		// Mean filter
 		float meanXTransform = transformXSum/numContributions;
 		float meanYTransform = transformYSum/numContributions;
@@ -393,11 +418,11 @@ void localize(){
 		numContributions = 360;
 		
 		for(int i = 0; i < xTransforms.size(); ++i){
-			if(abs(xTransforms.at(i) - meanXTransform) > thresholdX){
+			if(abs(xTransforms.at(i) - medianXTransform) > thresholdX){
 				continue;
-			}if(abs(yTransforms.at(i) - meanYTransform) > thresholdY){
+			}if(abs(yTransforms.at(i) - medianYTransform) > thresholdY){
 				continue;
-			}if(abs(yawTransforms.at(i) - meanYawTransform) > thresholdYaw){
+			}if(abs(yawTransforms.at(i) - medianYawTransform) > thresholdYaw){
 				continue;
 			}
 			
