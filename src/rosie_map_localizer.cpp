@@ -315,133 +315,137 @@ void localize(){
 	float bestYTransform = 0.0f;
 	float bestRotation = 0.0f;
 	for(float initialRotation = -1.14; initialRotation < 1.14; initialRotation += 0.1f){
+		for(double xOffset = -0.2; xOffset <= 0.2; xOffset += 0.2){
+			for(double yOffset = -0.2; yOffset >= 0.2; yOffset += 0.2){
 
-		double transformXSum = 0;
-		double transformYSum = 0;
-		double transformYawSum = 0;
+				double transformXSum = 0;
+				double transformYSum = 0;
+				double transformYawSum = 0;
+				
+				std::vector<double> xTransforms;
+				std::vector<double> yTransforms;
+				std::vector<double> yawTransforms;
+
+				float errorSum = 0.0f;
+				int numContributions = 0;
+				for(int i = 0; i < 360; i+=1){
+					geometry_msgs::Point32 pointInCloud = getMedianPointByDistance(
+																					getCyclicPointCloudElement(i-1,360),
+																					getCyclicPointCloudElement(i,360),
+																					getCyclicPointCloudElement(i+1,360)
+																				);
+
+					if(std::isnan(pointInCloud.x) || std::isnan(pointInCloud.y) || std::isnan(pointInCloud.z)){
+						continue;
+					}
+
+					tf::Vector3 point(xOffset + pointInCloud.x*cos(initialRotation)-pointInCloud.y*sin(initialRotation),
+											 yOffset + pointInCloud.x*sin(initialRotation)+pointInCloud.y*cos(initialRotation),
+											 pointInCloud.z);
+
+					/*tf::Vector3 point(pointInCloud.x,
+											 pointInCloud.y,
+											 pointInCloud.z);*/
+
+					if(std::isnan(point.x()) || std::isnan(point.y()) || std::isnan(point.z())){
+						continue;
+					}
+
+					tf::Vector3 point_tf = (*laser_point_tf_ptr) * point;
+
+					tf::Vector3 diffVector = getCorrectionFromPoint(point_tf, odomPoint, occGrid);
+
+					if(isnan(diffVector.z())){
+						continue;
+					}
+
+					if((diffVector.x() < -1.0f || diffVector.x() > 1.0f) && (diffVector.y() < -1.0f || diffVector.y() > 1.0f)){
+						continue;
+					}
+
+					errorSum += sqrt(pow(diffVector.x(),2) + pow(diffVector.y(),2));
+
+					++numContributions;
+					transformXSum += diffVector.x();
+					transformYSum += diffVector.y();
+					transformYawSum += diffVector.z();
+					
+					xTransforms.push_back(diffVector.x());
+					yTransforms.push_back(diffVector.y());
+					yawTransforms.push_back(diffVector.z());
+
+					if(diffVector.x() > -0.2f && diffVector.x() < 0.2f && diffVector.y() > -0.2f && diffVector.y() < 0.2f){
+						numContributions += 3;
+						transformXSum += diffVector.x()*3;
+						transformYSum += diffVector.y()*3;
+						transformYawSum += diffVector.z()*3;
+					}
+					if(sqrt(pow(point.x(),2) + pow(point.y(),2)) < 0.5){
+						++numContributions;
+						transformXSum += diffVector.x();
+						transformYSum += diffVector.y();
+						transformYawSum += diffVector.z();
+					}
+
+					if(initialRotation > -0.05 && initialRotation < 0.05){
+						geometry_msgs::Point p;
+						p.x = point_tf.x();
+						p.y = point_tf.y();
+						line_list.points.push_back(p);
+						p.x += diffVector.x();
+						p.y += diffVector.y();
+						line_list.points.push_back(p);
+					}
+					//ROS_INFO("Diffvector! X:%f, Y:%f, Yaw:%f",diffVector.x(),diffVector.y(),diffVector.z());
+				}
 		
-		std::vector<double> xTransforms;
-		std::vector<double> yTransforms;
-		std::vector<double> yawTransforms;
+				// Median filter
+				int medianIndex = getIndexOfMedianTransform(xTransforms, yTransforms, yawTransforms);
+				float medianXTransform = xTransforms.at(medianIndex);
+				float medianYTransform = yTransforms.at(medianIndex);
+				float medianYawTransform = yawTransforms.at(medianIndex);
+				
+				// Mean filter
+				float meanXTransform = transformXSum/numContributions;
+				float meanYTransform = transformYSum/numContributions;
+				float meanYawTransform = transformYawSum/numContributions;
+				
+				float thresholdX =  0.10f;
+				float thresholdY = 0.10f;
+				float thresholdYaw = 0.3f;
+				
+				transformXSum = 0;
+				transformYSum = 0;
+				transformYawSum = 0;
+				numContributions = 360;
+				
+				for(int i = 0; i < xTransforms.size(); ++i){
+					if(abs(xTransforms.at(i) - medianXTransform) > thresholdX){
+						continue;
+					}if(abs(yTransforms.at(i) - medianYTransform) > thresholdY){
+						continue;
+					}if(abs(yawTransforms.at(i) - medianYawTransform) > thresholdYaw){
+						continue;
+					}
+					
+					//++numContributions;
+					transformXSum += xTransforms.at(i);
+					transformYSum += yTransforms.at(i);
+					transformYawSum += yawTransforms.at(i);
+				}
 
-		float errorSum = 0.0f;
-		int numContributions = 0;
-		for(int i = 0; i < 360; i+=1){
-			geometry_msgs::Point32 pointInCloud = getMedianPointByDistance(
-																			getCyclicPointCloudElement(i-1,360),
-																			getCyclicPointCloudElement(i,360),
-																			getCyclicPointCloudElement(i+1,360)
-																		);
-
-			if(std::isnan(pointInCloud.x) || std::isnan(pointInCloud.y) || std::isnan(pointInCloud.z)){
-				continue;
+				float transformX = transformXSum/numContributions;
+				float transformY = transformYSum/numContributions;
+				float transformYaw = transformYawSum/numContributions;
+				errorSum /= numContributions;
+				float score = sqrt(pow(transformX,2) + pow(transformY,2));
+				if(bestScore < 0 || errorSum < bestScore){
+					bestRotation = capAngle(initialRotation+transformYaw)/5;
+					bestXTransform = transformX + xOffset;
+					bestYTransform = transformY + yOffset;
+					bestScore = errorSum;
+				}
 			}
-
-			tf::Vector3 point(pointInCloud.x*cos(initialRotation)-pointInCloud.y*sin(initialRotation),
-									 pointInCloud.x*sin(initialRotation)+pointInCloud.y*cos(initialRotation),
-									 pointInCloud.z);
-
-			/*tf::Vector3 point(pointInCloud.x,
-									 pointInCloud.y,
-									 pointInCloud.z);*/
-
-			if(std::isnan(point.x()) || std::isnan(point.y()) || std::isnan(point.z())){
-				continue;
-			}
-
-			tf::Vector3 point_tf = (*laser_point_tf_ptr) * point;
-
-			tf::Vector3 diffVector = getCorrectionFromPoint(point_tf, odomPoint, occGrid);
-
-			if(isnan(diffVector.z())){
-				continue;
-			}
-
-			if((diffVector.x() < -1.0f || diffVector.x() > 1.0f) && (diffVector.y() < -1.0f || diffVector.y() > 1.0f)){
-				continue;
-			}
-
-			errorSum += sqrt(pow(diffVector.x(),2) + pow(diffVector.y(),2));
-
-			++numContributions;
-			transformXSum += diffVector.x();
-			transformYSum += diffVector.y();
-			transformYawSum += diffVector.z();
-			
-			xTransforms.push_back(diffVector.x());
-			yTransforms.push_back(diffVector.y());
-			yawTransforms.push_back(diffVector.z());
-
-			if(diffVector.x() > -0.2f && diffVector.x() < 0.2f && diffVector.y() > -0.2f && diffVector.y() < 0.2f){
-				numContributions += 3;
-				transformXSum += diffVector.x()*3;
-				transformYSum += diffVector.y()*3;
-				transformYawSum += diffVector.z()*3;
-			}
-			if(sqrt(pow(point.x(),2) + pow(point.y(),2)) < 0.5){
-				++numContributions;
-				transformXSum += diffVector.x();
-				transformYSum += diffVector.y();
-				transformYawSum += diffVector.z();
-			}
-
-			if(initialRotation > -0.05 && initialRotation < 0.05){
-				geometry_msgs::Point p;
-				p.x = point_tf.x();
-				p.y = point_tf.y();
-				line_list.points.push_back(p);
-				p.x += diffVector.x();
-				p.y += diffVector.y();
-				line_list.points.push_back(p);
-			}
-			//ROS_INFO("Diffvector! X:%f, Y:%f, Yaw:%f",diffVector.x(),diffVector.y(),diffVector.z());
-		}
-		
-		// Median filter
-		int medianIndex = getIndexOfMedianTransform(xTransforms, yTransforms, yawTransforms);
-		float medianXTransform = xTransforms.at(medianIndex);
-		float medianYTransform = yTransforms.at(medianIndex);
-		float medianYawTransform = yawTransforms.at(medianIndex);
-		
-		// Mean filter
-		float meanXTransform = transformXSum/numContributions;
-		float meanYTransform = transformYSum/numContributions;
-		float meanYawTransform = transformYawSum/numContributions;
-		
-		float thresholdX =  0.10f;
-		float thresholdY = 0.10f;
-		float thresholdYaw = 0.3f;
-		
-		transformXSum = 0;
-		transformYSum = 0;
-		transformYawSum = 0;
-		numContributions = 360;
-		
-		for(int i = 0; i < xTransforms.size(); ++i){
-			if(abs(xTransforms.at(i) - medianXTransform) > thresholdX){
-				continue;
-			}if(abs(yTransforms.at(i) - medianYTransform) > thresholdY){
-				continue;
-			}if(abs(yawTransforms.at(i) - medianYawTransform) > thresholdYaw){
-				continue;
-			}
-			
-			//++numContributions;
-			transformXSum += xTransforms.at(i);
-			transformYSum += yTransforms.at(i);
-			transformYawSum += yawTransforms.at(i);
-		}
-
-		float transformX = transformXSum/numContributions;
-		float transformY = transformYSum/numContributions;
-		float transformYaw = transformYawSum/numContributions;
-		errorSum /= numContributions;
-		float score = sqrt(pow(transformX,2) + pow(transformY,2));
-		if(bestScore < 0 || errorSum < bestScore){
-			bestRotation = capAngle(initialRotation+transformYaw)/5;
-			bestXTransform = transformX;
-			bestYTransform = transformY;
-			bestScore = errorSum;
 		}
 	}
 	//ROS_INFO("Correction Sum! X:%f, Y:%f, Yaw:%f",transformXSum,transformYSum,transformYawSum);
