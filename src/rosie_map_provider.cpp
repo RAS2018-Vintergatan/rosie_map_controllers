@@ -112,11 +112,11 @@ void initializeMap(const visualization_msgs::MarkerArray msg){
 	float offsetX = minX;
 	float offsetY = minY;
 
-	width = (maxX - minX)/resolution;
-	height = (maxY - minY)/resolution;
+	width = (maxX - minX)/resolution + 1;
+	height = (maxY - minY)/resolution + 1;
 
-	ROS_INFO("minX: %f, minY: %f, maxX: %f, maxY: %f, offsetX: %f, offsetY: %f", minX, minY, maxX, maxY, offsetX, offsetY);
-	ROS_INFO("width: %d, height: %d", width, height);
+	ROS_ERROR("minX: %f, minY: %f, maxX: %f, maxY: %f, offsetX: %f, offsetY: %f", minX, minY, maxX, maxY, offsetX, offsetY);
+	ROS_ERROR("width: %d, height: %d", width, height);
 
 	occGrid = (std_msgs::Int8*)malloc(sizeof(std_msgs::Int8)*width*height); //Int8 representation, no matrix
 	for(int o = 0; o < width*height; ++o){
@@ -170,7 +170,6 @@ int main(int argc, char **argv){
 		rosie_map_updater::GetGrid mapSrv;
 
     ros::Rate loop_rate(5);
-
 
 	static tf::TransformBroadcaster br;
 

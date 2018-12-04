@@ -464,8 +464,8 @@ void localize(){
 				float score = sqrt(pow(transformX,2) + pow(transformY,2));
 				if(bestCertainty < 0 || certainty < bestCertainty){
 					bestRotation = capAngle(initialRotation+transformYaw)/8;
-					bestXTransform = (transformX + xOffset);
-					bestYTransform = (transformY + yOffset);
+					bestXTransform = (transformX + xOffset)/3;
+					bestYTransform = (transformY + yOffset)/3;
 					bestCertainty = certainty;
 					bestScore = errorSum;
 				}
