@@ -26,7 +26,7 @@ int width = 1;
 int height = 1;
 int numbMarkers = 0;
 
-float robotsize = 0.2;
+float robotsize = 0.25;
 static std_msgs::Int8* occGrid;
 
 float* pointArray;
